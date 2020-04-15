@@ -25,13 +25,6 @@ using namespace lbcrypto;
 // Specify IDENTITY_FOR_TYPE(T) in order to be able to construct an identity matrix
 IDENTITY_FOR_TYPE(complex<double>)
 
-// Make sure to define the correct path of the data folder
-const std::string DATAFOLDER = "../plantData/";
-
-
-Plant<complex<double>>* plantInitStableSys();
-
-Plant<complex<double>>* plantInitRoom();
 
 void OnlineFeedbackStop();
 void OnlineFeedbackRefreshStop();
@@ -40,9 +33,21 @@ void OfflineFeedback();
 
 int main()
 {
-	OnlineFeedbackStop(); // use the online measurements to compute the feedback, after Tstop steps, do not collect new samples anymore
-	// OnlineFeedbackRefreshStop(); // refresh the matrix at a multiple of Trefresh steps; after Tstop steps, do not collect new samples anymore
-	// OfflineFeedback(); // use only the precollected values to compute the feedback
+	/* 
+	 * Start collecting online measurements to compute the feedback after N steps; 
+	 * then, after Tstop steps, do not collect new samples anymore.
+	 */
+	OnlineFeedbackStop(); 
+	/*
+	 * Start collecting online measurements to compute the feedback after N steps; 
+	 * refresh the matrix at a multiple of Trefresh steps; 
+	 * then after Tstop steps, do not collect new samples anymore.
+	 */
+	// OnlineFeedbackRefreshStop();
+	/*
+	 * Use only the precollected values to compute the feedback
+	 */
+	// OfflineFeedback(); 
 
 	// plantInitStableSys();
 	// plantInitRoom();
@@ -60,21 +65,21 @@ void OnlineFeedbackStop()
 	double timeClientUpdate(0.0), timeClientDec(0.0), timeClientEnc(0.0);
 	double timeServer(0.0), timeServerUpdate(0.0);
 
-	/*
-	 * Simulation parameters
-	 */
-	uint32_t T = 10;
-
-	uint32_t Tstop = 5;	
-
 	/* 
 	 * Initialize the plant
 	 */
-	// Plant<complex<double>>* plant = plantInitStableSys(); // M = 1, N = 3, T = 10
+	// Plant<complex<double>>* plant = plantInitStableSys(); // M = 2, N = 4, T = 20
 	Plant<complex<double>>* plant = plantInitRoom(); // M = 4, N = 10, T = 40
 
-	// Scale M_1 up by a factor = scale (after t = 0)
-	std::complex<double> scale = 1000;	
+	/*
+	 * Simulation parameters
+	 */
+	uint32_t Tstop = plant->N + 10;	
+
+	uint32_t T = Tstop + 10;
+
+	// Scale M_1 up by a factor = scale (after t >= plant->N)
+	std::complex<double> scale = 100;	
 
 //////////////////////// Get inputs: r, yini, uini ////////////////////////
 	std::vector<complex<double>> r(plant->getr().GetRows()); // The setpoint
@@ -157,7 +162,7 @@ void OnlineFeedbackStop()
 	# pragma omp parallel for 
 			for (int32_t j = 0; j < dim2_r; j ++)
 				for (int32_t i = 0; i < dim1_r; i ++)
-					if (dim1_r*j + i < colsKur)
+					if (dim1_r*j + i < (int)colsKur)
 					{
 						Rotate(dKur[dim1_r*j+i],ReduceRotation(-dim1_r*j, rowsKur));
 					}
@@ -177,7 +182,7 @@ void OnlineFeedbackStop()
 	# pragma omp parallel for 
 				for (int32_t j = 0; j < dim2_r; j ++)
 					for (int32_t i = 0; i < dim1_r; i ++)
-						if (dim1_r*j + i < rowsKur)
+						if (dim1_r*j + i < (int)rowsKur)
 						{
 							Rotate(dKur[dim1_r*j+i],ReduceRotation(-dim1_r*j, colsKur));
 						}
@@ -196,11 +201,11 @@ void OnlineFeedbackStop()
 	# pragma omp parallel for 
 				for (int32_t j = 0; j < dim2_r; j ++)
 					for (int32_t i = 0; i < dim1_r; i ++)
-						if (dim1_r*j + i < colsKur)
+						if (dim1_r*j + i < (int)colsKur)
 						{
 							std::vector<complex<double>> temp1 = dKur[dim1_r*j+i];
 							std::vector<complex<double>> temp2 = dKur[dim1_r*j+i];
-							for (int32_t k = 1; k < colsKur/rowsKur; k++)
+							for (int32_t k = 1; k < (int)(colsKur/rowsKur); k++)
 								std::copy(temp2.begin(),temp2.end(),back_inserter(temp1));
 							std::copy(temp2.begin(),temp2.begin()+colsKur%rowsKur,back_inserter(temp1));	
 							dKur[dim1_r*j+i] = temp1;
@@ -224,7 +229,7 @@ void OnlineFeedbackStop()
 	# pragma omp parallel for 
 			for (int32_t j = 0; j < dim2_y; j ++)
 				for (int32_t i = 0; i < dim1_y; i ++)
-					if (dim1_y*j + i < colsKyini)
+					if (dim1_y*j + i < (int)colsKyini)
 					{
 						Rotate(dKyini[dim1_y*j+i],ReduceRotation(-dim1_y*j, rowsKyini));
 					}
@@ -244,7 +249,7 @@ void OnlineFeedbackStop()
 	# pragma omp parallel for 
 				for (int32_t j = 0; j < dim2_y; j ++)
 					for (int32_t i = 0; i < dim1_y; i ++)
-						if (dim1_y*j + i < rowsKyini)
+						if (dim1_y*j + i < (int)rowsKyini)
 						{
 							Rotate(dKyini[dim1_y*j+i],ReduceRotation(-dim1_y*j, colsKyini));
 						}
@@ -263,11 +268,11 @@ void OnlineFeedbackStop()
 	# pragma omp parallel for 
 				for (int32_t j = 0; j < dim2_y; j ++)
 					for (int32_t i = 0; i < dim1_y; i ++)
-						if (dim1_y*j + i < colsKyini)
+						if (dim1_y*j + i < (int)colsKyini)
 						{
 							std::vector<complex<double>> temp1 = dKyini[dim1_y*j+i];
 							std::vector<complex<double>> temp2 = dKyini[dim1_y*j+i];
-							for (int32_t k = 1; k < colsKyini/rowsKyini; k++)
+							for (int32_t k = 1; k < (int)(colsKyini/rowsKyini); k++)
 								std::copy(temp2.begin(),temp2.end(),back_inserter(temp1));
 							std::copy(temp2.begin(),temp2.begin()+colsKyini%rowsKyini,back_inserter(temp1));	
 							dKyini[dim1_y*j+i] = temp1;
@@ -288,7 +293,7 @@ void OnlineFeedbackStop()
 	# pragma omp parallel for 
 		for (int32_t j = 0; j < dim2_u; j ++)
 			for (int32_t i = 0; i < dim1_u; i ++)
-				if (dim1_u*j + i < colsKuini)
+				if (dim1_u*j + i < (int)colsKuini)
 				{
 					Rotate(dKuini[dim1_u*j+i],ReduceRotation(-dim1_u*j, rowsKuini));
 				}
@@ -361,7 +366,11 @@ void OnlineFeedbackStop()
 	 * transmits uini and yini at each time step.
 	 */
 
-	uint32_t multDepth = 2*(Tstop-2) + 7;
+	uint32_t multDepth;
+	if (Tstop < plant->N) // until the trajectories are concatenated, no deep computations are necessary
+		multDepth = 2; 
+	else
+		multDepth = 2*(Tstop-plant->N-1) + 7; // 2*(T-2)+7
 
 	cout << " # of time steps = " << T << ", stop collecting new samples after " << Tstop << \
 	", total circuit depth = " << multDepth << endl << endl;
@@ -590,7 +599,7 @@ void OnlineFeedbackStop()
 //////////////////////// Rotations for u = U*M_1*Z //////////////////////// 
 	for (size_t i = 0; i < plant->fu; i ++) // rotations to compute the elements of Uf
 		indexVec.push_back(plant->pu + i);	
-	for(int32_t i = 1; i < plant->m; i ++)	// in this case, we can only send the relevant elements
+	for(int32_t i = 1; i < (int)plant->m; i ++)	// in this case, we can only send the relevant elements
 		indexVec.push_back(-i);
 //////////////////////// Rotations for u = U*M_1*Z //////////////////////// 
 
@@ -711,7 +720,7 @@ void OnlineFeedbackStop()
 	 * Encrypt the encoded vectors 
 	 */
 
-//////////////////////// The values for the first iteration //////////////////////// 
+//////////////////////// The values for the first iterations until trajectory concatenation //////////////////////// 
 	auto ctxt_rep_r = cc->Encrypt(keys.publicKey, ptxt_rep_r);
 	auto ctxt_rep_yini = cc->Encrypt(keys.publicKey, ptxt_rep_yini);
 	auto ctxt_rep_uini = cc->Encrypt(keys.publicKey, ptxt_rep_uini);	
@@ -733,7 +742,7 @@ void OnlineFeedbackStop()
 	for (size_t i = 0; i < dKuini.size(); ++i){
 		ctxt_dKuini[i] = cc->Encrypt(keys.publicKey, ptxt_dKuini[i]);	
 	}
-//////////////////////// The values for the first iteration //////////////////////// 			
+//////////////////////// The values for the first iterations until trajectory concatenation //////////////////////// 			
 
 	auto ctxt_r = cc->Encrypt(keys.publicKey, ptxt_r);
 	auto ctxt_yini = cc->Encrypt(keys.publicKey, ptxt_yini);
@@ -796,6 +805,26 @@ void OnlineFeedbackStop()
 	std::vector<Ciphertext<DCRTPoly>> ctxt_mVec(S), ctxt_mVec_s(S); 
 	std::vector<Ciphertext<DCRTPoly>> ctxt_M_1mVec(S), ctxt_M_1mVec_s(S);
 
+	// This is necessary to start creating the next column in HU and HY
+	std::vector<complex<double>> temp_u = mat2Vec(plant->getHU().ExtractCol(plant->S-1));
+	std::vector<complex<double>> temp_y = mat2Vec(plant->getHY().ExtractCol(plant->S-1));
+
+	// Update temp_u, temp_y with uini and yini
+	for (size_t j = 0; j < plant->fu; j ++)
+		temp_u[j] = temp_u[j+plant->pu];
+	for (size_t j = plant->fu; j < plant->pu+plant->fu; j ++)
+		temp_u[j] = uini[j-plant->fu];
+
+	for (size_t j = 0; j < plant->fy; j ++)
+		temp_y[j] = temp_y[j+plant->py];
+	for (size_t j = plant->fy; j < plant->py+plant->fy; j ++)
+		temp_y[j] = yini[j-plant->fy];				
+
+	Plaintext ptxt_temp_y = cc->MakeCKKSPackedPlaintext(temp_y);
+	Ciphertext<DCRTPoly> ctxt_temp_y = cc->Encrypt(keys.publicKey, ptxt_temp_y);
+	Plaintext ptxt_temp_u = cc->MakeCKKSPackedPlaintext(temp_u);
+	Ciphertext<DCRTPoly> ctxt_temp_u = cc->Encrypt(keys.publicKey, ptxt_temp_u);							
+
 	// Start online computations
 	for (size_t t = 0; t < T; t ++)
 	{
@@ -805,7 +834,7 @@ void OnlineFeedbackStop()
 
 		TIC(t1);
 
-		if (t == 0) 
+		if (t < plant->N) // until the trajectory concatenation 
 		{
 
 			// Matrix-vector multiplication for Kur*r
@@ -839,13 +868,13 @@ void OnlineFeedbackStop()
 			
 		}
 
-		else // t>0
+		else // t>=plant->N
 		{
 			if (t < Tstop)
 			{
 				ctxt_mSchur = cc->EvalSum( cc->EvalAdd (cc->EvalMult( cc->EvalMult( ctxt_cHY[S], ctxt_cHY[S] ), ptxt_lamQ ),\
 					cc->EvalMult( cc->EvalMult( ctxt_cHU[S], ctxt_cHU[S] ), ptxt_lamR ) ), max(Ty,Tu) );
-				ctxt_mSchur = cc->EvalAdd( ctxt_mSchur, ptxt_lamg );
+				ctxt_mSchur = cc->EvalAdd( ctxt_mSchur, ptxt_lamg );		
 
 	# pragma omp parallel for
 				for (size_t i = 0; i < S; i ++){
@@ -873,7 +902,7 @@ void OnlineFeedbackStop()
 					ctxt_mVec_s[i] = cc->Rescale(ctxt_mVec_s[i]); ctxt_mVec_s[i] = cc->Rescale(ctxt_mVec_s[i]);						
 				}
 
-				ctxt_mSchur = cc->Rescale(ctxt_mSchur); ctxt_mSchur = cc->Rescale(ctxt_mSchur);	
+				ctxt_mSchur = cc->Rescale(ctxt_mSchur); ctxt_mSchur = cc->Rescale(ctxt_mSchur);						
 
 				Ciphertext<DCRTPoly> ctxt_tempSum = ctxt_mSchur;
 				for (size_t i = 0; i < S; ++i) 
@@ -891,7 +920,7 @@ void OnlineFeedbackStop()
 				for (size_t i = 0; i < S; ++i) 
 					ctxt_tempSum = cc->EvalAdd( ctxt_tempSum, cc->EvalMult( ctxt_M_1[i][0], cc->Rescale(cc->EvalMult( ctxt_mVec[i], ctxt_mVec_s[i] ) )) );				
 
-				ctxt_mSchur = cc->EvalSub( ctxt_mSchur, cc->Rescale(ctxt_tempSum) );				
+				ctxt_mSchur = cc->EvalSub( ctxt_mSchur, cc->Rescale(ctxt_tempSum) );														
 
 	# pragma omp parallel for 
 				for (size_t i = 0; i < S; ++i)
@@ -924,6 +953,7 @@ void OnlineFeedbackStop()
 	# pragma omp parallel for 
 				for (size_t i = 0; i < S; ++i)
 					ctxt_M_1mVec_s[i] = cc->Rescale(ctxt_M_1mVec_s[i]);	
+	
 
 				// Resize ctxt_M_1
 				ctxt_M_1.resize(S+1);
@@ -952,7 +982,7 @@ void OnlineFeedbackStop()
 				size_t M_1_levels = ctxt_M_1_copy[0][0]->GetLevel();
 
 	# pragma omp parallel for 
-				for (size_t i = 0; i <= S; ++i) // add -M_1mVecT as the last column of M_1
+				for (size_t i = 0; i < S+1; ++i) // add -M_1mVecT as the last column of M_1
 					ctxt_M_1_copy[i][S-i] = cc->LevelReduce(ctxt_M_1_copy[i][S-i], nullptr, M_1_levels - ctxt_M_1_copy[i][S-i]->GetLevel()); 				
 
 
@@ -985,8 +1015,7 @@ void OnlineFeedbackStop()
 					ctxt_Z[i] = cc->EvalMult( ctxt_Z[i], ptxt_1 ); 
 					// rescale to get it to the needed depth
 					ctxt_Z[i] = cc->Rescale(ctxt_Z[i]); ctxt_Z[i] = cc->Rescale(ctxt_Z[i]);	ctxt_Z[i] = cc->Rescale(ctxt_Z[i]);	
-				}									
-				
+				}																	
 
 				std::vector<Ciphertext<DCRTPoly>> ctxt_uel(plant->m);
 				for (size_t k = 0; k < plant->m; k ++)
@@ -1006,13 +1035,24 @@ void OnlineFeedbackStop()
 				}							
 
 				ctxt_u = ctxt_uel[0];		
-				for(int32_t i = 1; i < plant->m; i ++)	// in this case, we can only send the relevant elements
+				for(int32_t i = 1; i < (int)plant->m; i ++)	// in this case, we can only send the relevant elements
 					ctxt_u = cc->EvalAdd( ctxt_u, cc->GetEncryptionAlgorithm()->EvalAtIndex( ctxt_uel[i], -i, *EvalRotKeys));
 
 			}
 			else // t >= Tstop
 			{
-				TIC(t1);					
+				TIC(t1);	
+
+				if (t == Tstop) // update once the last column of the matrix Uf
+				{
+					auto HUSPrecomp = cc->GetEncryptionAlgorithm()->EvalFastRotationPrecompute( ctxt_cHU[S-1] );			
+
+					for (size_t i = 0; i < plant->fu; i ++)
+					{
+						ctxt_Uf[i].resize(S);			
+						ctxt_Uf[i][S-1] = cc->GetEncryptionAlgorithm()->EvalFastRotation( ctxt_cHU[S-1], plant->pu + i, cyclOrder, HUSPrecomp, *EvalRotKeys ); 		
+					}	
+				}							
 
 				std::vector<Ciphertext<DCRTPoly>> ctxt_Z(S);
 	# pragma omp parallel for
@@ -1024,7 +1064,7 @@ void OnlineFeedbackStop()
 					ctxt_Z[i] = cc->EvalMult( ctxt_Z[i], ptxt_1 ); 
 					// rescale to get it to the needed depth
 					ctxt_Z[i] = cc->Rescale(ctxt_Z[i]); ctxt_Z[i] = cc->Rescale(ctxt_Z[i]);	ctxt_Z[i] = cc->Rescale(ctxt_Z[i]);	
-				}						
+				}									
 		
 
 				std::vector<Ciphertext<DCRTPoly>> ctxt_uel(plant->m);
@@ -1045,7 +1085,7 @@ void OnlineFeedbackStop()
 				}							
 
 				ctxt_u = ctxt_uel[0];		
-				for(int32_t i = 1; i < plant->m; i ++)	// in this case, we can only send the relevant elements
+				for(int32_t i = 1; i < (int)plant->m; i ++)	// in this case, we can only send the relevant elements
 				{
 					ctxt_u = cc->EvalAdd( ctxt_u, cc->GetEncryptionAlgorithm()->EvalAtIndex( ctxt_uel[i], -i, *EvalRotKeys));
 				}				
@@ -1063,7 +1103,7 @@ void OnlineFeedbackStop()
 		Plaintext ptxt_Schur;
 		complex<double> mSchur_1;
 
-		if ( t > 0 && t < Tstop)
+		if ( t >= plant->N && t < Tstop)
 		{
 			cc->Decrypt(keys.secretKey, ctxt_mSchur, &ptxt_Schur);
 			ptxt_Schur->SetLength(1);
@@ -1074,14 +1114,11 @@ void OnlineFeedbackStop()
 		Plaintext result_u_t;
 		cout.precision(8);
 		cc->Decrypt(keys.secretKey, ctxt_u, &result_u_t);
-		if ( (t == 0) || (t > 0) )
-			result_u_t->SetLength(plant->m);
-		else
-			result_u_t->SetLength(Tu);
+		result_u_t->SetLength(plant->m);
 
 		auto u = result_u_t->GetCKKSPackedValue(); // Make sure to make the imaginary parts to be zero s.t. error does not accumulate
 
-		if (t > 0 && t < Tstop)
+		if (t >= plant->N && t < Tstop)
 			for (size_t i = 0; i < plant->m; i ++)
 					u[i] *= mSchur_1/scale;			
 
@@ -1098,8 +1135,16 @@ void OnlineFeedbackStop()
 		TIC(t1);
 
 		// Update plant
-		plant->onlineUpdatex(u);
-		plant->onlineLQR();
+		if (t < plant->N)
+		{
+			plant->updatex(u);
+		}
+		else 
+		{
+			plant->onlineUpdatex(u);
+			plant->onlineLQR();
+		}
+
 		if (plant->M == 1)
 		{
 			uini = u;
@@ -1114,6 +1159,7 @@ void OnlineFeedbackStop()
 			mat2Vec(plant->gety(),y);
 			std::copy(y.begin(),y.begin()+plant->p,yini.begin()+plant->py-plant->p);			
 		}
+
 
 		// plant->printYU(); // if you want to print inputs and outputs at every time step
 
@@ -1130,40 +1176,67 @@ void OnlineFeedbackStop()
 			// Re-encrypt variables 
 			// Make sure to cut the number of towers
 
-			if (t > 0 && t < Tstop)
+			uint32_t tLevRed = 2*(t-plant->N+1);
+
+			if (t >= plant->N && t < Tstop)
 			{	
 				ptxt_y = cc->MakeCKKSPackedPlaintext(mat2Vec(plant->gety()),1,0);
 				ctxt_y = cc->Encrypt(keys.publicKey, ptxt_y); 		
-				ctxt_y = cc->LevelReduce(ctxt_y, nullptr, 2*t);	
+				ctxt_y = cc->LevelReduce(ctxt_y, nullptr, tLevRed);					
 				ptxt_u = cc->MakeCKKSPackedPlaintext(u,1,0);
 				ctxt_u = cc->Encrypt(keys.publicKey, ptxt_u);	
-				ctxt_u = cc->LevelReduce(ctxt_u, nullptr, 2*t);	
+				ctxt_u = cc->LevelReduce(ctxt_u, nullptr, tLevRed);	
 				ctxt_mSchur_1 = cc->Encrypt(keys.publicKey, cc->MakeCKKSPackedPlaintext({mSchur_1},1,0));
-				ctxt_mSchur_1 = cc->LevelReduce(ctxt_mSchur_1,nullptr,2*t);			
+				ctxt_mSchur_1 = cc->LevelReduce(ctxt_mSchur_1,nullptr, tLevRed);			
 				ctxt_scaled_mSchur_1 = cc->Encrypt(keys.publicKey, cc->MakeCKKSPackedPlaintext({scale*mSchur_1},1,0));
-				ctxt_scaled_mSchur_1 = cc->LevelReduce(ctxt_scaled_mSchur_1,nullptr,2*t);					
+				ctxt_scaled_mSchur_1 = cc->LevelReduce(ctxt_scaled_mSchur_1,nullptr, tLevRed);		
 			}
 			else
 			{
-				if (t < Tstop)
+				if (t < plant->N ) // different case because we want the rotated uini and yini - this could be done at the server too, but need more rotations
 				{
 					ptxt_y = cc->MakeCKKSPackedPlaintext(mat2Vec(plant->gety()));
 					ctxt_y = cc->Encrypt(keys.publicKey, ptxt_y);
 					ptxt_u = cc->MakeCKKSPackedPlaintext(u);
-					ctxt_u = cc->Encrypt(keys.publicKey, ptxt_u);			
-					ctxt_mSchur_1 = cc->Encrypt(keys.publicKey, cc->MakeCKKSPackedPlaintext({mSchur_1}));
-					ctxt_scaled_mSchur_1 = cc->Encrypt(keys.publicKey, cc->MakeCKKSPackedPlaintext({mSchur_1*scale}));
+					ctxt_u = cc->Encrypt(keys.publicKey, ptxt_u);	
+
+					rep_yini = Fill(yini,slots);	
+					ptxt_yini = cc->MakeCKKSPackedPlaintext(rep_yini);
+					ctxt_rep_yini = cc->Encrypt(keys.publicKey, ptxt_yini);
+
+					rep_uini = Fill(uini,slots);	
+					ptxt_uini = cc->MakeCKKSPackedPlaintext(rep_uini);		
+					ctxt_rep_uini = cc->Encrypt(keys.publicKey, ptxt_uini);	
+
+					if (t == plant->N - 1)
+					{
+						ptxt_yini = cc->MakeCKKSPackedPlaintext(yini);
+						ctxt_yini = cc->Encrypt(keys.publicKey, ptxt_yini);
+						ptxt_uini = cc->MakeCKKSPackedPlaintext(uini);
+						ctxt_uini = cc->Encrypt(keys.publicKey, ptxt_uini);		
+					}					
+
 				}
-				else // t >= Tstop
-				{
-					int32_t dropLevels = ctxt_y->GetLevel(); // previous ctxt_y
-					ptxt_y = cc->MakeCKKSPackedPlaintext(mat2Vec(plant->gety()));
-					ctxt_y = cc->Encrypt(keys.publicKey, ptxt_y);
-					ptxt_u = cc->MakeCKKSPackedPlaintext(u);
-					ctxt_u = cc->Encrypt(keys.publicKey, ptxt_u);				
-					ctxt_y = cc->LevelReduce(ctxt_y, nullptr, dropLevels);	
-					ctxt_u = cc->LevelReduce(ctxt_u, nullptr, dropLevels);								
-				}				
+				else
+					if (t < Tstop)
+					{
+						ptxt_y = cc->MakeCKKSPackedPlaintext(mat2Vec(plant->gety()));
+						ctxt_y = cc->Encrypt(keys.publicKey, ptxt_y);
+						ptxt_u = cc->MakeCKKSPackedPlaintext(u);
+						ctxt_u = cc->Encrypt(keys.publicKey, ptxt_u);			
+						ctxt_mSchur_1 = cc->Encrypt(keys.publicKey, cc->MakeCKKSPackedPlaintext({mSchur_1}));
+						ctxt_scaled_mSchur_1 = cc->Encrypt(keys.publicKey, cc->MakeCKKSPackedPlaintext({mSchur_1*scale}));
+					}
+					else // t >= Tstop
+					{
+						int32_t dropLevels = ctxt_y->GetLevel(); // previous ctxt_y
+						ptxt_y = cc->MakeCKKSPackedPlaintext(mat2Vec(plant->gety()));
+						ctxt_y = cc->Encrypt(keys.publicKey, ptxt_y);
+						ptxt_u = cc->MakeCKKSPackedPlaintext(u);
+						ctxt_u = cc->Encrypt(keys.publicKey, ptxt_u);				
+						ctxt_y = cc->LevelReduce(ctxt_y, nullptr, dropLevels);	
+						ctxt_u = cc->LevelReduce(ctxt_u, nullptr, dropLevels);																		
+					}				
 
 			}		
 
@@ -1176,7 +1249,7 @@ void OnlineFeedbackStop()
 			////////////// Back to the server.
 			TIC(t1);
 
-			if (t > 0)
+			if (t >= plant->N)
 			{
 				if (t < Tstop)
 				{
@@ -1205,6 +1278,7 @@ void OnlineFeedbackStop()
 					for (size_t i = 0; i < S; ++i) // change the first S-1 columns of M_1 (taking into account the symmetry)
 						for (size_t j = 1; j < S-i; ++j)
 							ctxt_M_1[i][j] = cc->EvalSub( ctxt_M_1[i][j], cc->Rescale(cc->EvalMult( ctxt_M_1[i][S-i], ctxt_M_1mVec_s[i+j] ))  );
+					
 
 					S += 1;
 				}
@@ -1212,40 +1286,70 @@ void OnlineFeedbackStop()
 
 			if (t < Tstop)
 			{
-				ctxt_cHY.resize(S+1); ctxt_cHU.resize(S+1);	
+				if (t == 0 || t >= plant->N)
+				{
+					ctxt_cHY.resize(S+1); ctxt_cHU.resize(S+1);	
+				}
 
-				if ( t > 0 )
+				if ( t >= plant->N )
 				{
 					ctxt_cHY[S-1] = cc->LevelReduce(ctxt_cHY[S-1], nullptr, 2);
 					ctxt_cHU[S-1] = cc->LevelReduce(ctxt_cHU[S-1], nullptr, 2);
-					ctxt_yini = cc->LevelReduce(ctxt_yini, nullptr, 2);
+					ctxt_yini = cc->LevelReduce(ctxt_yini, nullptr, 2);									
 					ctxt_uini = cc->LevelReduce(ctxt_uini, nullptr, 2);
 					ctxt_r = cc->LevelReduce(ctxt_r, nullptr, 2);
 					CompressEvalKeys(*EvalRotKeys, 2);
+
+					ctxt_mVec.resize(S+1); ctxt_M_1mVec.resize(S+1);
+					ctxt_mVec_s.resize(S+1); ctxt_M_1mVec_s.resize(S+1);	
+					
 				}	
 
+				if (t == 0) // create new cHY[S] and cHU[S] with the Tini measurements
+				{
+					ctxt_cHY[S] = ctxt_temp_y;
+					ctxt_cHU[S] = ctxt_temp_u;			
 
-				ctxt_cHY[S] = cc->EvalAdd( cc->GetEncryptionAlgorithm()->EvalAtIndex(ctxt_cHY[S-1], plant->p, *EvalRotKeys),\
-					cc->GetEncryptionAlgorithm()->EvalAtIndex(ctxt_y, -Ty+plant->p, *EvalRotKeys) );
-				ctxt_cHU[S] = cc->EvalAdd( cc->GetEncryptionAlgorithm()->EvalAtIndex(ctxt_cHU[S-1], plant->m, *EvalRotKeys),\
-					cc->GetEncryptionAlgorithm()->EvalAtIndex(ctxt_u, -Tu+plant->m, *EvalRotKeys) );	
+					ctxt_cHY[S] = cc->EvalAdd( cc->GetEncryptionAlgorithm()->EvalAtIndex(ctxt_cHY[S], plant->p, *EvalRotKeys),\
+						cc->GetEncryptionAlgorithm()->EvalAtIndex(ctxt_y, -Ty+plant->p, *EvalRotKeys) );
+					ctxt_cHU[S] = cc->EvalAdd( cc->GetEncryptionAlgorithm()->EvalAtIndex(ctxt_cHU[S], plant->m, *EvalRotKeys),\
+						cc->GetEncryptionAlgorithm()->EvalAtIndex(ctxt_u, -Tu+plant->m, *EvalRotKeys) );						
+				}
+				else 
+					if (t > 0 && t < plant->N)
+					{
+						ctxt_cHY[S] = cc->EvalAdd( cc->GetEncryptionAlgorithm()->EvalAtIndex(ctxt_cHY[S], plant->p, *EvalRotKeys),\
+							cc->GetEncryptionAlgorithm()->EvalAtIndex(ctxt_y, -Ty+plant->p, *EvalRotKeys) );
+						ctxt_cHU[S] = cc->EvalAdd( cc->GetEncryptionAlgorithm()->EvalAtIndex(ctxt_cHU[S], plant->m, *EvalRotKeys),\
+							cc->GetEncryptionAlgorithm()->EvalAtIndex(ctxt_u, -Tu+plant->m, *EvalRotKeys) );	
 
-				ctxt_mVec.resize(S+1); ctxt_M_1mVec.resize(S+1);
-				ctxt_mVec_s.resize(S+1); ctxt_M_1mVec_s.resize(S+1);						
+					}
+					else
+					{
+						ctxt_cHY[S] = cc->EvalAdd( cc->GetEncryptionAlgorithm()->EvalAtIndex(ctxt_cHY[S-1], plant->p, *EvalRotKeys),\
+							cc->GetEncryptionAlgorithm()->EvalAtIndex(ctxt_y, -Ty+plant->p, *EvalRotKeys) );
+						ctxt_cHU[S] = cc->EvalAdd( cc->GetEncryptionAlgorithm()->EvalAtIndex(ctxt_cHU[S-1], plant->m, *EvalRotKeys),\
+							cc->GetEncryptionAlgorithm()->EvalAtIndex(ctxt_u, -Tu+plant->m, *EvalRotKeys) );	
+					}
+														
+				
 			}
 
-			if (plant->M == 1)
+			if ( t >= plant->N) // otherwise the client sends the values already encrypted
 			{
-				ctxt_yini = ctxt_y;
-				ctxt_uini = ctxt_u;
-			}
-			else 
-			{
-				ctxt_yini = cc->EvalAdd( cc->GetEncryptionAlgorithm()->EvalAtIndex(ctxt_yini, plant->p, *EvalRotKeys),\
-					cc->GetEncryptionAlgorithm()->EvalAtIndex(ctxt_y, -plant->py+plant->p, *EvalRotKeys) );
-				ctxt_uini = cc->EvalAdd( cc->GetEncryptionAlgorithm()->EvalAtIndex(ctxt_uini, plant->m, *EvalRotKeys),\
-					cc->GetEncryptionAlgorithm()->EvalAtIndex(ctxt_u, -plant->pu+plant->m, *EvalRotKeys) );
-			}
+				if (plant->M == 1)
+				{
+					ctxt_yini = ctxt_y;
+					ctxt_uini = ctxt_u;
+				}
+				else 
+				{
+					ctxt_yini = cc->EvalAdd( cc->GetEncryptionAlgorithm()->EvalAtIndex(ctxt_yini, plant->p, *EvalRotKeys),\
+						cc->GetEncryptionAlgorithm()->EvalAtIndex(ctxt_y, -plant->py+plant->p, *EvalRotKeys) );
+					ctxt_uini = cc->EvalAdd( cc->GetEncryptionAlgorithm()->EvalAtIndex(ctxt_uini, plant->m, *EvalRotKeys),\
+						cc->GetEncryptionAlgorithm()->EvalAtIndex(ctxt_u, -plant->pu+plant->m, *EvalRotKeys) );
+				}
+			}			
 		
 
 			timeServerUpdate = TOC(t1);
@@ -1273,6 +1377,7 @@ void OnlineFeedbackStop()
 
 	plant->printYU(); // print all inputs and outputs at the end of the simulation
 
+
 }
 
 
@@ -1285,23 +1390,23 @@ void OnlineFeedbackRefreshStop()
 	double timeClientUpdate(0.0), timeClientDec(0.0), timeClientEnc(0.0);
 	double timeServer(0.0), timeServerUpdate(0.0), timeServerRefresh(0.0);
 
-	/*
-	 * Simulation parameters
-	 */
-	uint32_t T = 10;
-
-	uint32_t Trefresh = 3; // Make sure Trefresh <= Tstop - 2.
-
-	uint32_t Tstop = 5;
-
 	/* 
 	 * Initialize the plant
 	 */
-	// Plant<complex<double>>* plant = plantInitStableSys(); // M = 1, N = 3, T = 10
-	Plant<complex<double>>* plant = plantInitRoom(); // M = 4, N = 10, T = 40
+	// Plant<complex<double>>* plant = plantInitStableSys(); // M = 2, N = 4, T = 20
+	Plant<complex<double>>* plant = plantInitRoom(); // M = 4, N = 10, T = 40	
+
+	/*
+	 * Simulation parameters
+	 */
+	uint32_t Tstop = plant->N + 15;	
+
+	uint32_t T = Tstop + 10;
+
+	uint32_t Trefresh = 8; // Make sure Trefresh <= Tstop - plant->N - 1.
 
 	// Scale M_1 up by a factor of scale (after t == 0)
-	std::complex<double> scale = 1000;	
+	std::complex<double> scale = 100;	
 
 //////////////////////// Get inputs: r, yini, uini ////////////////////////
 	std::vector<complex<double>> r(plant->getr().GetRows()); // The setpoint
@@ -1384,7 +1489,7 @@ void OnlineFeedbackRefreshStop()
 	# pragma omp parallel for 
 			for (int32_t j = 0; j < dim2_r; j ++)
 				for (int32_t i = 0; i < dim1_r; i ++)
-					if (dim1_r*j + i < colsKur)
+					if (dim1_r*j + i < (int)colsKur)
 					{
 						Rotate(dKur[dim1_r*j+i],ReduceRotation(-dim1_r*j, rowsKur));
 					}
@@ -1404,7 +1509,7 @@ void OnlineFeedbackRefreshStop()
 	# pragma omp parallel for 
 				for (int32_t j = 0; j < dim2_r; j ++)
 					for (int32_t i = 0; i < dim1_r; i ++)
-						if (dim1_r*j + i < rowsKur)
+						if (dim1_r*j + i < (int)rowsKur)
 						{
 							Rotate(dKur[dim1_r*j+i],ReduceRotation(-dim1_r*j, colsKur));
 						}
@@ -1423,11 +1528,11 @@ void OnlineFeedbackRefreshStop()
 	# pragma omp parallel for 
 				for (int32_t j = 0; j < dim2_r; j ++)
 					for (int32_t i = 0; i < dim1_r; i ++)
-						if (dim1_r*j + i < colsKur)
+						if (dim1_r*j + i < (int)colsKur)
 						{
 							std::vector<complex<double>> temp1 = dKur[dim1_r*j+i];
 							std::vector<complex<double>> temp2 = dKur[dim1_r*j+i];
-							for (int32_t k = 1; k < colsKur/rowsKur; k++)
+							for (int32_t k = 1; k < (int)(colsKur/rowsKur); k++)
 								std::copy(temp2.begin(),temp2.end(),back_inserter(temp1));
 							std::copy(temp2.begin(),temp2.begin()+colsKur%rowsKur,back_inserter(temp1));	
 							dKur[dim1_r*j+i] = temp1;
@@ -1451,7 +1556,7 @@ void OnlineFeedbackRefreshStop()
 	# pragma omp parallel for 
 			for (int32_t j = 0; j < dim2_y; j ++)
 				for (int32_t i = 0; i < dim1_y; i ++)
-					if (dim1_y*j + i < colsKyini)
+					if (dim1_y*j + i < (int)colsKyini)
 					{
 						Rotate(dKyini[dim1_y*j+i],ReduceRotation(-dim1_y*j, rowsKyini));
 					}
@@ -1471,7 +1576,7 @@ void OnlineFeedbackRefreshStop()
 	# pragma omp parallel for 
 				for (int32_t j = 0; j < dim2_y; j ++)
 					for (int32_t i = 0; i < dim1_y; i ++)
-						if (dim1_y*j + i < rowsKyini)
+						if (dim1_y*j + i < (int)rowsKyini)
 						{
 							Rotate(dKyini[dim1_y*j+i],ReduceRotation(-dim1_y*j, colsKyini));
 						}
@@ -1490,11 +1595,11 @@ void OnlineFeedbackRefreshStop()
 	# pragma omp parallel for 
 				for (int32_t j = 0; j < dim2_y; j ++)
 					for (int32_t i = 0; i < dim1_y; i ++)
-						if (dim1_y*j + i < colsKyini)
+						if (dim1_y*j + i < (int)colsKyini)
 						{
 							std::vector<complex<double>> temp1 = dKyini[dim1_y*j+i];
 							std::vector<complex<double>> temp2 = dKyini[dim1_y*j+i];
-							for (int32_t k = 1; k < colsKyini/rowsKyini; k++)
+							for (int32_t k = 1; k < (int)(colsKyini/rowsKyini); k++)
 								std::copy(temp2.begin(),temp2.end(),back_inserter(temp1));
 							std::copy(temp2.begin(),temp2.begin()+colsKyini%rowsKyini,back_inserter(temp1));	
 							dKyini[dim1_y*j+i] = temp1;
@@ -1515,7 +1620,7 @@ void OnlineFeedbackRefreshStop()
 	# pragma omp parallel for 
 		for (int32_t j = 0; j < dim2_u; j ++)
 			for (int32_t i = 0; i < dim1_u; i ++)
-				if (dim1_u*j + i < colsKuini)
+				if (dim1_u*j + i < (int)colsKuini)
 				{
 					Rotate(dKuini[dim1_u*j+i],ReduceRotation(-dim1_u*j, rowsKuini));
 				}
@@ -1588,7 +1693,11 @@ void OnlineFeedbackRefreshStop()
 	 * transmits uini and yini at each time step.
 	 */
 
-	uint32_t multDepth = 2*(Trefresh-1) + 7;
+	uint32_t multDepth;
+	if (Tstop < plant->N) // until the trajectories are concatenated, no deep computations are necessary
+		multDepth = 2; 
+	else
+		multDepth = 2*(Trefresh-1) + 7; //2*(Tstop-plant->N-1) + 7;
 
 	cout << " # of time steps = " << T << ", refresh at time = " << Trefresh << "*k, " <<\
 	"stop collecting at time = " << Tstop <<", total circuit depth = " << multDepth << endl << endl;
@@ -1812,7 +1921,7 @@ void OnlineFeedbackRefreshStop()
 //////////////////////// Rotations for u = U*M_1*Z //////////////////////// 
 	for (size_t i = 0; i < plant->fu; i ++) // rotations to compute the elements of Uf
 		indexVec.push_back(plant->pu + i);	
-	for(int32_t i = 1; i < plant->m; i ++)	// in this case, we can only send the relevant elements
+	for(int32_t i = 1; i < (int)plant->m; i ++)	// in this case, we can only send the relevant elements
 		indexVec.push_back(-i);
 //////////////////////// Rotations for u = U*M_1*Z //////////////////////// 
 
@@ -1834,11 +1943,11 @@ void OnlineFeedbackRefreshStop()
 
 //////////////////////// Rotations for refreshing M_1 ////////////////////////	
 	indexVec.clear();
-	for (int32_t k = 1; k <= int((Tstop-2)/Trefresh); k ++)
+	for (int32_t k = 1; k <= int((Tstop-plant->N-1)/Trefresh); k ++)
 	{
-		for (int32_t i = 0; i < S + k*Trefresh; i ++)
+		for (int32_t i = 0; i < S + k*Trefresh ; i ++) 
 		{
-			for (int32_t j = 0; j < S + k*Trefresh - i; j ++)
+			for (int32_t j = 0; j < S + k*Trefresh - i; j ++) 
 			{
 				indexVec.push_back( -(int)(i * (S + k*Trefresh) - int(i*(i-1)/2) + j ) );
 			}
@@ -1851,15 +1960,16 @@ void OnlineFeedbackRefreshStop()
 	//remove automorphisms corresponding to 0
 	indexVec.erase(std::remove(indexVec.begin(), indexVec.end(), 0), indexVec.end());	
 
+
 	auto EvalPackKeys = cc->GetEncryptionAlgorithm()->EvalAtIndexKeyGen(nullptr, keys.secretKey, indexVec);		
 	CompressEvalKeys(*EvalPackKeys, (2*(Trefresh-1)+5));
 
 	indexVec.clear();
-	for (int32_t k = 1; k <= int((Tstop-2)/Trefresh); k ++)
+	for (int32_t k = 1; k <= int((Tstop-plant->N-1)/Trefresh); k ++)
 	{
-		for (int32_t i = 0; i < S + k*Trefresh; i ++)
+		for (int32_t i = 0; i < S + k*Trefresh; i ++) 
 		{
-			for (int32_t j = 0; j < S + k*Trefresh - i; j ++)
+			for (int32_t j = 0; j < S + k*Trefresh - i; j ++) 
 			{
 				indexVec.push_back( i * (S + k*Trefresh) - int(i*(i-1)/2) + j );
 			}
@@ -2007,17 +2117,17 @@ void OnlineFeedbackRefreshStop()
 	auto ctxt_yini = cc->Encrypt(keys.publicKey, ptxt_yini);
 	auto ctxt_uini = cc->Encrypt(keys.publicKey, ptxt_uini);	
 
-	std::vector<Ciphertext<DCRTPoly>> ctxt_cHY(S);
+	std::vector<Ciphertext<DCRTPoly>> ctxt_cHY(S+1); // S+1 to prepare for the trajectory concatenation
 # pragma omp parallel for 
 	for (size_t i = 0; i < S; ++i)
-		ctxt_cHY[i] = cc->Encrypt(keys.publicKey, ptxt_cHY[i]);
+		ctxt_cHY[i] = cc->Encrypt(keys.publicKey, ptxt_cHY[i]); // S+1 to prepare for the trajectory concatenation
 
-	std::vector<Ciphertext<DCRTPoly>> ctxt_cHU(S);
+	std::vector<Ciphertext<DCRTPoly>> ctxt_cHU(S+1);
 # pragma omp parallel for 
 	for (size_t i = 0; i < S; ++i)
 		ctxt_cHU[i] = cc->Encrypt(keys.publicKey, ptxt_cHU[i]);
 
-	std::vector<std::vector<Ciphertext<DCRTPoly>>> ctxt_M_1(S);
+	std::vector<std::vector<Ciphertext<DCRTPoly>>> ctxt_M_1(S); // it seems to be more time cosuming to allocate the whole matrix from the beginning
 # pragma omp parallel for 
 	for (size_t i = 0; i < S; ++i) // symmetric matrix
 	{
@@ -2062,6 +2172,26 @@ void OnlineFeedbackRefreshStop()
 	std::vector<Ciphertext<DCRTPoly>> ctxt_M_1mVec(S), ctxt_M_1mVec_s(S);
 	Ciphertext<DCRTPoly> ctxt_M_1_packed; // ciphertexts that packs M_1
 
+	// This is necessary to start creating the next column in HU and HY
+	std::vector<complex<double>> temp_u = mat2Vec(plant->getHU().ExtractCol(plant->S-1));
+	std::vector<complex<double>> temp_y = mat2Vec(plant->getHY().ExtractCol(plant->S-1));
+
+	// Update temp_u, temp_y with uini and yini
+	for (size_t j = 0; j < plant->fu; j ++)
+		temp_u[j] = temp_u[j+plant->pu];
+	for (size_t j = plant->fu; j < plant->pu+plant->fu; j ++)
+		temp_u[j] = uini[j-plant->fu];
+
+	for (size_t j = 0; j < plant->fy; j ++)
+		temp_y[j] = temp_y[j+plant->py];
+	for (size_t j = plant->fy; j < plant->py+plant->fy; j ++)
+		temp_y[j] = yini[j-plant->fy];				
+
+	Plaintext ptxt_temp_y = cc->MakeCKKSPackedPlaintext(temp_y);
+	Ciphertext<DCRTPoly> ctxt_temp_y = cc->Encrypt(keys.publicKey, ptxt_temp_y);
+	Plaintext ptxt_temp_u = cc->MakeCKKSPackedPlaintext(temp_u);
+	Ciphertext<DCRTPoly> ctxt_temp_u = cc->Encrypt(keys.publicKey, ptxt_temp_u);				
+
 	// Start online computations
 	for (size_t t = 0; t < T; t ++)
 	{
@@ -2071,7 +2201,7 @@ void OnlineFeedbackRefreshStop()
 
 		TIC(t1);
 
-		if (t == 0) 
+		if (t < plant->N) 
 		{
 
 			// Matrix-vector multiplication for Kur*r
@@ -2105,7 +2235,7 @@ void OnlineFeedbackRefreshStop()
 		
 		}
 
-		else // t>0
+		else // t>=plant->N
 		{
 			if (t < Tstop)
 			{
@@ -2221,7 +2351,7 @@ void OnlineFeedbackRefreshStop()
 
 				// When u_t reaches the maximum allowed multiplicative depth, the server packs M_1 into a vector (if S^2 < RD/2 and into multiple vectors otherwise) 
 				// and sends it to the client, that refreshes a single ciphertexts 
-				if ( t % Trefresh == 0 && t != Tstop - 1) // in the last case, we don't need to refresh M_1
+				if ( (t > plant->N ) && ((t-plant->N+1) % Trefresh == 0) && t != Tstop - 1) // in the last case, we don't need to refresh M_1
 				{
 					TIC(t3);
 
@@ -2230,8 +2360,10 @@ void OnlineFeedbackRefreshStop()
 						if (i == 0)
 							ctxt_M_1_packed = cc->EvalMult( ctxt_M_1_copy[i][0], ptxt_1 );
 						else
+						{
 							ctxt_M_1_packed = cc->EvalAdd(ctxt_M_1_packed, cc->GetEncryptionAlgorithm()->EvalAtIndex(\
 								cc->EvalMult( ctxt_M_1_copy[i][0], ptxt_1 ), -(int)(i*(S+1) - int(i*(i-1)/2)), *EvalPackKeys ) );
+						}
 						for (int32_t j = 1; j < S+1-i; j ++)
 						{
 							ctxt_M_1_packed = cc->EvalAdd( ctxt_M_1_packed, cc->GetEncryptionAlgorithm()->EvalAtIndex(\
@@ -2240,7 +2372,7 @@ void OnlineFeedbackRefreshStop()
 										
 					}
 					// clear keys if this was the last refresh
-					if (t == int((Tstop-2)/Trefresh)*Trefresh)
+					if (t-plant->N+1 == int((Tstop-plant->N-1)/Trefresh)*Trefresh)
 					{
 						EvalPackKeys->clear();
 					}	
@@ -2297,7 +2429,7 @@ void OnlineFeedbackRefreshStop()
 				}							
 
 				ctxt_u = ctxt_uel[0];		
-				for(int32_t i = 1; i < plant->m; i ++)	// in this case, we can only send the relevant elements
+				for(int32_t i = 1; i < (int)plant->m; i ++)	// in this case, we can only send the relevant elements
 				{
 					ctxt_u = cc->EvalAdd( ctxt_u, cc->GetEncryptionAlgorithm()->EvalAtIndex( ctxt_uel[i], -i, *EvalRotKeys));
 				}
@@ -2305,7 +2437,18 @@ void OnlineFeedbackRefreshStop()
 			}
 			else // t >= Tstop
 			{
-				TIC(t1);					
+				TIC(t1);		
+
+				if (t == Tstop) // update once the last column of the matrix Uf
+				{
+					auto HUSPrecomp = cc->GetEncryptionAlgorithm()->EvalFastRotationPrecompute( ctxt_cHU[S-1] );			
+
+					for (size_t i = 0; i < plant->fu; i ++)
+					{
+						ctxt_Uf[i].resize(S);			
+						ctxt_Uf[i][S-1] = cc->GetEncryptionAlgorithm()->EvalFastRotation( ctxt_cHU[S-1], plant->pu + i, cyclOrder, HUSPrecomp, *EvalRotKeys ); 		
+					}	
+				}			
 
 				std::vector<Ciphertext<DCRTPoly>> ctxt_Z(S);
 	# pragma omp parallel for
@@ -2317,26 +2460,27 @@ void OnlineFeedbackRefreshStop()
 					ctxt_Z[i] = cc->EvalMult( ctxt_Z[i], ptxt_1 ); 
 					// rescale to get it to the needed depth
 					ctxt_Z[i] = cc->Rescale(ctxt_Z[i]); ctxt_Z[i] = cc->Rescale(ctxt_Z[i]);	ctxt_Z[i] = cc->Rescale(ctxt_Z[i]);	
-				}						
-		
+				}		
 
 				std::vector<Ciphertext<DCRTPoly>> ctxt_uel(plant->m);
 				for (size_t k = 0; k < plant->m; k ++)
 				{
 					ctxt_uel[k] = cc->EvalMult ( ctxt_M_1[0][0], cc->Rescale(cc->EvalMult( ctxt_Uf[k][0], ctxt_Z[0] )) );
 					for (size_t i = 1; i < S; ++i) 				
+					{				
 						ctxt_uel[k] = cc->EvalAdd( ctxt_uel[k], cc->EvalMult ( ctxt_M_1[i][0], cc->Rescale(cc->EvalMult( ctxt_Uf[k][i], ctxt_Z[i] ) )) );
+					}
 
 					for (size_t i = 0; i < S; ++i) 
 						for (size_t j = 1; j < S-i; ++j)
-						{				
+						{													
 							ctxt_uel[k] = cc->EvalAdd( ctxt_uel[k], cc->EvalMult ( ctxt_M_1[i][j], \
 								cc->EvalAdd( cc->Rescale(cc->EvalMult( ctxt_Uf[k][i], ctxt_Z[i+j] )), cc->Rescale(cc->EvalMult( ctxt_Uf[k][i+j], ctxt_Z[i] ) )) ) );
 						}
 				}							
 
 				ctxt_u = ctxt_uel[0];		
-				for(int32_t i = 1; i < plant->m; i ++)	// in this case, we can only send the relevant elements
+				for(int32_t i = 1; i < (int)plant->m; i ++)	// in this case, we can only send the relevant elements
 				{
 					ctxt_u = cc->EvalAdd( ctxt_u, cc->GetEncryptionAlgorithm()->EvalAtIndex( ctxt_uel[i], -i, *EvalRotKeys));
 				}				
@@ -2354,7 +2498,7 @@ void OnlineFeedbackRefreshStop()
 		Plaintext ptxt_Schur;
 		complex<double> mSchur_1;
 
-		if ( t > 0 && t < Tstop )
+		if ( t >= plant->N && t < Tstop )
 		{
 			cc->Decrypt(keys.secretKey, ctxt_mSchur, &ptxt_Schur);
 			ptxt_Schur->SetLength(1);
@@ -2364,14 +2508,11 @@ void OnlineFeedbackRefreshStop()
 		Plaintext result_u_t;
 		cout.precision(8);
 		cc->Decrypt(keys.secretKey, ctxt_u, &result_u_t);
-		if ( (t == 0) || (t > 0) )
-			result_u_t->SetLength(plant->m);
-		else
-			result_u_t->SetLength(Tu);
+		result_u_t->SetLength(plant->m);
 
 		auto u = result_u_t->GetCKKSPackedValue(); // Make sure to make the imaginary parts to be zero s.t. error does not accumulate
 
-		if (t > 0 && t < Tstop)
+		if (t >= plant->N && t < Tstop)
 			for (size_t i = 0; i < plant->m; i ++)
 					u[i] *= mSchur_1/scale;			
 
@@ -2389,8 +2530,16 @@ void OnlineFeedbackRefreshStop()
 		TIC(t1);
 
 		// Update plant
-		plant->onlineUpdatex(u);
-		plant->onlineLQR();
+		if ( t < plant->N )
+		{
+			plant->updatex(u);
+		}
+		else
+		{
+			plant->onlineUpdatex(u);
+			plant->onlineLQR();
+		}
+
 		if (plant->M == 1)
 		{
 			uini = u;
@@ -2422,75 +2571,117 @@ void OnlineFeedbackRefreshStop()
 			// Re-encrypt variables 
 			// Make sure to cut the number of towers
 
-			if ((t > 0) && (t > (int)((Tstop-2)/Trefresh)*Trefresh ) && (t < Tstop)) 
+			if ((t >= plant->N) && (t-plant->N+1 > (int)((Tstop-plant->N-1)/Trefresh)*Trefresh ) && (t < Tstop)) 
 			{	
-				if ( t%Trefresh != 0)
+				if ( (t-plant->N+1)%Trefresh != 0)
 				{
+					int32_t tred = 2*((t-plant->N+1)%Trefresh);
 					ptxt_y = cc->MakeCKKSPackedPlaintext(mat2Vec(plant->gety()),1,0);
 					ctxt_y = cc->Encrypt(keys.publicKey, ptxt_y); 		
-					ctxt_y = cc->LevelReduce(ctxt_y, nullptr, 2*(t%Trefresh));	
+					ctxt_y = cc->LevelReduce(ctxt_y, nullptr, tred);	
 					ptxt_u = cc->MakeCKKSPackedPlaintext(u,1,0);
 					ctxt_u = cc->Encrypt(keys.publicKey, ptxt_u);	
-					ctxt_u = cc->LevelReduce(ctxt_u, nullptr, 2*(t%Trefresh));	
+					ctxt_u = cc->LevelReduce(ctxt_u, nullptr, tred);	
 					ctxt_mSchur_1 = cc->Encrypt(keys.publicKey, cc->MakeCKKSPackedPlaintext({mSchur_1},1,0));
-					ctxt_mSchur_1 = cc->LevelReduce(ctxt_mSchur_1,nullptr,2*(t%Trefresh));			
+					ctxt_mSchur_1 = cc->LevelReduce(ctxt_mSchur_1,nullptr,tred);			
 					ctxt_scaled_mSchur_1 = cc->Encrypt(keys.publicKey, cc->MakeCKKSPackedPlaintext({scale*mSchur_1},1,0));
-					ctxt_scaled_mSchur_1 = cc->LevelReduce(ctxt_scaled_mSchur_1,nullptr,2*(t%Trefresh));	
+					ctxt_scaled_mSchur_1 = cc->LevelReduce(ctxt_scaled_mSchur_1,nullptr,tred);	
 				}	
 				else // need a corner case because of the stop
 				{
-					int32_t tred = t - (int)((Tstop-2)/Trefresh)*Trefresh;
+					int32_t tred = 2*(t-plant->N+1 - (int)((Tstop-plant->N-1)/Trefresh)*Trefresh);
 					ptxt_y = cc->MakeCKKSPackedPlaintext(mat2Vec(plant->gety()),1,0);
 					ctxt_y = cc->Encrypt(keys.publicKey, ptxt_y); 		
-					ctxt_y = cc->LevelReduce(ctxt_y, nullptr, 2*tred);	
+					ctxt_y = cc->LevelReduce(ctxt_y, nullptr, tred);	
 					ptxt_u = cc->MakeCKKSPackedPlaintext(u,1,0);
 					ctxt_u = cc->Encrypt(keys.publicKey, ptxt_u);	
-					ctxt_u = cc->LevelReduce(ctxt_u, nullptr, 2*tred);	
+					ctxt_u = cc->LevelReduce(ctxt_u, nullptr, tred);	
 					ctxt_mSchur_1 = cc->Encrypt(keys.publicKey, cc->MakeCKKSPackedPlaintext({mSchur_1},1,0));
-					ctxt_mSchur_1 = cc->LevelReduce(ctxt_mSchur_1,nullptr,2*tred);			
+					ctxt_mSchur_1 = cc->LevelReduce(ctxt_mSchur_1,nullptr,tred);			
 					ctxt_scaled_mSchur_1 = cc->Encrypt(keys.publicKey, cc->MakeCKKSPackedPlaintext({scale*mSchur_1},1,0));
-					ctxt_scaled_mSchur_1 = cc->LevelReduce(ctxt_scaled_mSchur_1,nullptr,2*tred);						
+					ctxt_scaled_mSchur_1 = cc->LevelReduce(ctxt_scaled_mSchur_1,nullptr,tred);						
 				}			
 			}
 			else
 			{
-				if (t < Tstop)
+				if (t < plant->N) // different case because we want rotated uini and yini - this could be done at the server too, but need more rotations
 				{
 					ptxt_y = cc->MakeCKKSPackedPlaintext(mat2Vec(plant->gety()));
 					ctxt_y = cc->Encrypt(keys.publicKey, ptxt_y);
 					ptxt_u = cc->MakeCKKSPackedPlaintext(u);
-					ctxt_u = cc->Encrypt(keys.publicKey, ptxt_u);			
-					if (t > 0)
-					{
-						ctxt_mSchur_1 = cc->Encrypt(keys.publicKey, cc->MakeCKKSPackedPlaintext({mSchur_1}));
-						ctxt_scaled_mSchur_1 = cc->Encrypt(keys.publicKey, cc->MakeCKKSPackedPlaintext({mSchur_1*scale}));
-					}
+					ctxt_u = cc->Encrypt(keys.publicKey, ptxt_u);	
 
-					if ((t > 0) && (t%Trefresh == 0) ) 
+					rep_yini = Fill(yini,slots);	
+					ptxt_yini = cc->MakeCKKSPackedPlaintext(rep_yini);
+					ctxt_rep_yini = cc->Encrypt(keys.publicKey, ptxt_yini);
+
+					rep_uini = Fill(uini,slots);	
+					ptxt_uini = cc->MakeCKKSPackedPlaintext(rep_uini);		
+					ctxt_rep_uini = cc->Encrypt(keys.publicKey, ptxt_uini);	
+
+					if (t == plant->N - 1)
 					{
-						Plaintext result_M_1;
-						cc->Decrypt(keys.secretKey, ctxt_M_1_packed, &result_M_1);		
-						result_M_1->SetLength(int((S+1)*(S+2)/2));
-						std::vector<complex<double>> M_1_packed(int((S+1)*(S+2)/2));
-						for (size_t i = 0; i < (S+1)*(S+2)/2; i ++)
+						ptxt_yini = cc->MakeCKKSPackedPlaintext(yini);
+						ctxt_yini = cc->Encrypt(keys.publicKey, ptxt_yini);
+						ptxt_uini = cc->MakeCKKSPackedPlaintext(uini);
+						ctxt_uini = cc->Encrypt(keys.publicKey, ptxt_uini);		
+					}		
+				}
+				else
+					if (t < Tstop)
+					{
+						ptxt_y = cc->MakeCKKSPackedPlaintext(mat2Vec(plant->gety()));
+						ctxt_y = cc->Encrypt(keys.publicKey, ptxt_y);
+						ptxt_u = cc->MakeCKKSPackedPlaintext(u);
+						ctxt_u = cc->Encrypt(keys.publicKey, ptxt_u);		
+
+						if (t >= plant->N)
 						{
-							M_1_packed[i] = mSchur_1 * result_M_1->GetCKKSPackedValue()[i];	
-							M_1_packed[i].imag(0);
+							ctxt_mSchur_1 = cc->Encrypt(keys.publicKey, cc->MakeCKKSPackedPlaintext({mSchur_1}));
+							ctxt_scaled_mSchur_1 = cc->Encrypt(keys.publicKey, cc->MakeCKKSPackedPlaintext({mSchur_1*scale}));
 						}
 
-						ctxt_M_1_packed = cc->Encrypt(keys.publicKey, cc->MakeCKKSPackedPlaintext(M_1_packed)); 	
-					} 
-				}
-				else // t >= Tstop
-				{
-					int32_t dropLevels = ctxt_y->GetLevel(); // previous ctxt_y
-					ptxt_y = cc->MakeCKKSPackedPlaintext(mat2Vec(plant->gety()),1,0);
-					ctxt_y = cc->Encrypt(keys.publicKey, ptxt_y); 		
-					ptxt_u = cc->MakeCKKSPackedPlaintext(u,1,0);
-					ctxt_u = cc->Encrypt(keys.publicKey, ptxt_u);			
-					ctxt_y = cc->LevelReduce(ctxt_y, nullptr, dropLevels);	
-					ctxt_u = cc->LevelReduce(ctxt_u, nullptr, dropLevels);							
-				}
+						if ((t > plant->N) && ((t-plant->N+1)%Trefresh == 0) ) 
+						{
+							Plaintext result_M_1;
+							cc->Decrypt(keys.secretKey, ctxt_M_1_packed, &result_M_1);		
+							result_M_1->SetLength(int((S+1)*(S+2)/2));
+							std::vector<complex<double>> M_1_packed(int((S+1)*(S+2)/2));
+							for (size_t i = 0; i < (S+1)*(S+2)/2; i ++)
+							{
+								M_1_packed[i] = mSchur_1 * result_M_1->GetCKKSPackedValue()[i];	
+								M_1_packed[i].imag(0);
+							}
+
+							ctxt_M_1_packed = cc->Encrypt(keys.publicKey, cc->MakeCKKSPackedPlaintext(M_1_packed)); 	
+
+							 // the last packing should sometimes have fewer levels than the maximum number
+							if (t-plant->N+1 == int((Tstop-plant->N-1)/Trefresh)*Trefresh)
+							{
+								int32_t remLevels = 6 + (Tstop-t-1)*2;						
+								ctxt_M_1_packed = cc->LevelReduce(ctxt_M_1_packed, nullptr, (int)ctxt_M_1_packed->GetElements()[0].GetParams()->GetParams().size()-remLevels); 
+							}
+
+							if (t-plant->N+1 >= int((Tstop-plant->N-1)/Trefresh)*Trefresh)	
+							{
+								int32_t remLevels = 6 + (Tstop-t-1)*2; // this is how many levels are necessary to compute u* with the minimum # of levels							
+								ctxt_y = cc->LevelReduce(ctxt_y, nullptr, (int)ctxt_y->GetElements()[0].GetParams()->GetParams().size()-remLevels);	
+								ctxt_u = cc->LevelReduce(ctxt_u, nullptr, (int)ctxt_u->GetElements()[0].GetParams()->GetParams().size()-remLevels);	
+							}					
+
+
+						} 
+					}
+					else // t >= Tstop
+					{
+						int32_t remLevels = 6; // this is how many levels are necessary to compute u* with the minimum # of levels
+						ptxt_y = cc->MakeCKKSPackedPlaintext(mat2Vec(plant->gety()),1,0);
+						ctxt_y = cc->Encrypt(keys.publicKey, ptxt_y); 		
+						ptxt_u = cc->MakeCKKSPackedPlaintext(u,1,0);
+						ctxt_u = cc->Encrypt(keys.publicKey, ptxt_u);								
+						ctxt_y = cc->LevelReduce(ctxt_y, nullptr, (int)ctxt_y->GetElements()[0].GetParams()->GetParams().size()-remLevels);	
+						ctxt_u = cc->LevelReduce(ctxt_u, nullptr, (int)ctxt_u->GetElements()[0].GetParams()->GetParams().size()-remLevels);																				
+					}
 
 			}		
 
@@ -2503,11 +2694,11 @@ void OnlineFeedbackRefreshStop()
 			////////////// Back to the server.
 			TIC(t1);
 
-			if (t > 0)
+			if (t >= plant->N)
 			{
 				if (t < Tstop)
 				{
-					if ( (t%Trefresh)!= 0 || (t > int((Tstop-2)/Trefresh)*Trefresh) )
+					if ( (t == plant->N) || ((t-plant->N+1)%Trefresh)!= 0 || (t-plant->N+1 > int((Tstop-plant->N-1)/Trefresh)*Trefresh) )
 					{
 						ctxt_M_1[S][0] = ctxt_scaled_mSchur_1; // encryption of 1/mSchur of the last element on the diagonal	
 						
@@ -2536,9 +2727,9 @@ void OnlineFeedbackRefreshStop()
 								ctxt_M_1[i][j] = cc->EvalSub( ctxt_M_1[i][j], cc->Rescale(cc->EvalMult( ctxt_M_1[i][S-i], ctxt_M_1mVec_s[i+j] ))  );
 						
 					}
-					else //(t%Trefresh)== 0
+					else //((t-plant->N+1)%Trefresh)== 0 && (t-plant->N+1 <= int((Tstop-plant->N-1)/Trefresh)*Trefresh)
 					{
-						if (t < Tstop-1) // in this last case, we don't need to refresh M_1
+						if (t < Tstop) // in the case t = Tstop - 1, we don't need to refresh M_1, it should not get here
 						{
 							// compute digits for fast rotations 
 							auto M_1Precomp = cc->GetEncryptionAlgorithm()->EvalFastRotationPrecompute( ctxt_M_1_packed );
@@ -2559,51 +2750,100 @@ void OnlineFeedbackRefreshStop()
 						}
 
 						// clear keys if this was the last refresh
-						if (t == int((Tstop-2)/Trefresh)*Trefresh)
+						if (t-plant->N+1 == int((Tstop-plant->N-1)/Trefresh)*Trefresh)
 						{
 							EvalUnpackKeys->clear();
 						}									
-					}			
+					}								
 
 					S += 1;
 				}
 			}
 
+
+
 			if (t < Tstop)
 			{
-				ctxt_cHY.resize(S+1); ctxt_cHU.resize(S+1);	
-
-				if ( (t > 0) && (t > (int)((Tstop-2)/Trefresh)*Trefresh ) )
+				if (t >= plant->N)
 				{
-					ctxt_cHY[S-1] = cc->LevelReduce(ctxt_cHY[S-1], nullptr, 2);
-					ctxt_cHU[S-1] = cc->LevelReduce(ctxt_cHU[S-1], nullptr, 2);
-					ctxt_yini = cc->LevelReduce(ctxt_yini, nullptr, 2);
-					ctxt_uini = cc->LevelReduce(ctxt_uini, nullptr, 2);
-					ctxt_r = cc->LevelReduce(ctxt_r, nullptr, 2);
-					CompressEvalKeys(*EvalRotKeys, 2);
-				}	
+					ctxt_cHY.resize(S+1); ctxt_cHU.resize(S+1);	
+				}
 
-				ctxt_cHY[S] = cc->EvalAdd( cc->GetEncryptionAlgorithm()->EvalAtIndex(ctxt_cHY[S-1], plant->p, *EvalRotKeys),\
-					cc->GetEncryptionAlgorithm()->EvalAtIndex(ctxt_y, -Ty+plant->p, *EvalRotKeys) );
-				ctxt_cHU[S] = cc->EvalAdd( cc->GetEncryptionAlgorithm()->EvalAtIndex(ctxt_cHU[S-1], plant->m, *EvalRotKeys),\
-					cc->GetEncryptionAlgorithm()->EvalAtIndex(ctxt_u, -Tu+plant->m, *EvalRotKeys) );	
+				if (t >= plant->N) 
+				{
 
-				ctxt_mVec.resize(S+1); ctxt_M_1mVec.resize(S+1);
-				ctxt_mVec_s.resize(S+1); ctxt_M_1mVec_s.resize(S+1);					
+					if (t-plant->N+1 == int((Tstop-plant->N-1)/Trefresh)*Trefresh)	
+					{
+						int32_t remLevels = 6 + (Tstop-(int((Tstop-plant->N-1)/Trefresh)*Trefresh - 1 + plant->N)-1)*2; // this is how many levels are necessary to compute u* with the minimum # of levels	
+						ctxt_yini = cc->LevelReduce(ctxt_yini, nullptr, (int)ctxt_yini->GetElements()[0].GetParams()->GetParams().size()-remLevels);
+						ctxt_uini = cc->LevelReduce(ctxt_uini, nullptr, (int)ctxt_uini->GetElements()[0].GetParams()->GetParams().size()-remLevels);
+					}							
+
+					if (t-plant->N+1 > (int)((Tstop-plant->N-1)/Trefresh)*Trefresh ) 
+					{
+						ctxt_cHY[S-1] = cc->LevelReduce(ctxt_cHY[S-1], nullptr, 2);
+						ctxt_cHU[S-1] = cc->LevelReduce(ctxt_cHU[S-1], nullptr, 2);
+						ctxt_yini = cc->LevelReduce(ctxt_yini, nullptr, 2);
+						ctxt_uini = cc->LevelReduce(ctxt_uini, nullptr, 2);
+						ctxt_r = cc->LevelReduce(ctxt_r, nullptr, 2);
+						CompressEvalKeys(*EvalRotKeys, 2);						
+					}	
+					ctxt_mVec.resize(S+1); ctxt_M_1mVec.resize(S+1);
+					ctxt_mVec_s.resize(S+1); ctxt_M_1mVec_s.resize(S+1);	
+
+				}
+
+				if (t == 0)
+				{
+					ctxt_cHY[S] = ctxt_temp_y;
+					ctxt_cHU[S] = ctxt_temp_u;			
+
+					ctxt_cHY[S] = cc->EvalAdd( cc->GetEncryptionAlgorithm()->EvalAtIndex(ctxt_cHY[S], plant->p, *EvalRotKeys),\
+						cc->GetEncryptionAlgorithm()->EvalAtIndex(ctxt_y, -Ty+plant->p, *EvalRotKeys) );
+					ctxt_cHU[S] = cc->EvalAdd( cc->GetEncryptionAlgorithm()->EvalAtIndex(ctxt_cHU[S], plant->m, *EvalRotKeys),\
+						cc->GetEncryptionAlgorithm()->EvalAtIndex(ctxt_u, -Tu+plant->m, *EvalRotKeys) );	
+				}
+				else
+					if (t > 0 && t < plant->N)
+					{
+						ctxt_cHY[S] = cc->EvalAdd( cc->GetEncryptionAlgorithm()->EvalAtIndex(ctxt_cHY[S], plant->p, *EvalRotKeys),\
+							cc->GetEncryptionAlgorithm()->EvalAtIndex(ctxt_y, -Ty+plant->p, *EvalRotKeys) );
+						ctxt_cHU[S] = cc->EvalAdd( cc->GetEncryptionAlgorithm()->EvalAtIndex(ctxt_cHU[S], plant->m, *EvalRotKeys),\
+							cc->GetEncryptionAlgorithm()->EvalAtIndex(ctxt_u, -Tu+plant->m, *EvalRotKeys) );	
+					}
+					else
+					{
+						ctxt_cHY[S] = cc->EvalAdd( cc->GetEncryptionAlgorithm()->EvalAtIndex(ctxt_cHY[S-1], plant->p, *EvalRotKeys),\
+							cc->GetEncryptionAlgorithm()->EvalAtIndex(ctxt_y, -Ty+plant->p, *EvalRotKeys) );
+						ctxt_cHU[S] = cc->EvalAdd( cc->GetEncryptionAlgorithm()->EvalAtIndex(ctxt_cHU[S-1], plant->m, *EvalRotKeys),\
+							cc->GetEncryptionAlgorithm()->EvalAtIndex(ctxt_u, -Tu+plant->m, *EvalRotKeys) );	
+					}					
+		
 			}	
 
-			if (plant->M == 1)
+			if (t == Tstop)
 			{
-				ctxt_yini = ctxt_y;
-				ctxt_uini = ctxt_u;
-			}
-			else 
+				int32_t remLevels = 6; // this is how many levels are necessary to compute u* with the minimum # of levels
+				ctxt_yini = cc->LevelReduce(ctxt_yini, nullptr, (int)ctxt_yini->GetElements()[0].GetParams()->GetParams().size()-remLevels);
+				ctxt_uini = cc->LevelReduce(ctxt_uini, nullptr, (int)ctxt_uini->GetElements()[0].GetParams()->GetParams().size()-remLevels);				
+			}			
+
+			if ( t >= plant->N) // otherwise the client sends the values already encrypted
 			{
-				ctxt_yini = cc->EvalAdd( cc->GetEncryptionAlgorithm()->EvalAtIndex(ctxt_yini, plant->p, *EvalRotKeys),\
-					cc->GetEncryptionAlgorithm()->EvalAtIndex(ctxt_y, -plant->py+plant->p, *EvalRotKeys) );
-				ctxt_uini = cc->EvalAdd( cc->GetEncryptionAlgorithm()->EvalAtIndex(ctxt_uini, plant->m, *EvalRotKeys),\
-					cc->GetEncryptionAlgorithm()->EvalAtIndex(ctxt_u, -plant->pu+plant->m, *EvalRotKeys) );
-			}
+				if (plant->M == 1)
+				{
+					ctxt_yini = ctxt_y;
+					ctxt_uini = ctxt_u;
+				}
+				else 
+				{
+					ctxt_yini = cc->EvalAdd( cc->GetEncryptionAlgorithm()->EvalAtIndex(ctxt_yini, plant->p, *EvalRotKeys),\
+						cc->GetEncryptionAlgorithm()->EvalAtIndex(ctxt_y, -plant->py+plant->p, *EvalRotKeys) );
+					ctxt_uini = cc->EvalAdd( cc->GetEncryptionAlgorithm()->EvalAtIndex(ctxt_uini, plant->m, *EvalRotKeys),\
+						cc->GetEncryptionAlgorithm()->EvalAtIndex(ctxt_u, -plant->pu+plant->m, *EvalRotKeys) );
+				}
+			}			
+						
 
 			timeServerUpdate = TOC(t1);
 			cout << "Time for updating the M_1, Hankel matrices, uini and yini at the server at time " << t+1 << ": " << timeServerUpdate << " ms" << endl;	
@@ -2613,6 +2853,11 @@ void OnlineFeedbackRefreshStop()
 
 			cout << "S = " << S << endl;
 		}
+		else
+		{
+			timeStep = TOC(t2);		
+			cout << "\nTotal time for evaluation at time " << t << ": " << timeStep << " ms" << endl << endl;	
+		}				
 
 
 	}	
@@ -2624,7 +2869,6 @@ void OnlineFeedbackRefreshStop()
 	cout << "Total offline+online time for evaluation for " << T << " steps: " << timeEval << " ms" << endl;	
 
 	plant->printYU(); // print all inputs and outputs at the end of the simulation
-
 
 }
 
@@ -2638,7 +2882,7 @@ void OfflineFeedback()
 	/*
 	 * Simulation parameters
 	 */	
-	uint32_t T = 5;
+	uint32_t T = 10;
 
 	int32_t flagSendU = 1;	
 
@@ -2744,7 +2988,7 @@ void OfflineFeedback()
 # pragma omp parallel for 
 			for (int32_t j = 0; j < dim2_r; j ++)
 				for (int32_t i = 0; i < dim1_r; i ++)
-					if (dim1_r*j + i < colsKur)
+					if (dim1_r*j + i < (int)colsKur)
 					{
 						Rotate(dKur[dim1_r*j+i],ReduceRotation(-dim1_r*j, rowsKur));
 					}
@@ -2764,7 +3008,7 @@ void OfflineFeedback()
 # pragma omp parallel for 
 				for (int32_t j = 0; j < dim2_r; j ++)
 					for (int32_t i = 0; i < dim1_r; i ++)
-						if (dim1_r*j + i < rowsKur)
+						if (dim1_r*j + i < (int)rowsKur)
 						{
 							Rotate(dKur[dim1_r*j+i],ReduceRotation(-dim1_r*j, colsKur));
 						}
@@ -2783,11 +3027,11 @@ void OfflineFeedback()
 # pragma omp parallel for 
 				for (int32_t j = 0; j < dim2_r; j ++)
 					for (int32_t i = 0; i < dim1_r; i ++)
-						if (dim1_r*j + i < colsKur)
+						if (dim1_r*j + i < (int)colsKur)
 						{
 							std::vector<complex<double>> temp1 = dKur[dim1_r*j+i];
 							std::vector<complex<double>> temp2 = dKur[dim1_r*j+i];
-							for (int32_t k = 1; k < colsKur/rowsKur; k++)
+							for (int32_t k = 1; k < (int)(colsKur/rowsKur); k++)
 								std::copy(temp2.begin(),temp2.end(),back_inserter(temp1));
 							std::copy(temp2.begin(),temp2.begin()+colsKur%rowsKur,back_inserter(temp1));	
 							dKur[dim1_r*j+i] = temp1;
@@ -2811,7 +3055,7 @@ void OfflineFeedback()
 # pragma omp parallel for 
 			for (int32_t j = 0; j < dim2_y; j ++)
 				for (int32_t i = 0; i < dim1_y; i ++)
-					if (dim1_y*j + i < colsKyini)
+					if (dim1_y*j + i < (int)colsKyini)
 					{
 						Rotate(dKyini[dim1_y*j+i],ReduceRotation(-dim1_y*j, rowsKyini));
 					}
@@ -2831,7 +3075,7 @@ void OfflineFeedback()
 # pragma omp parallel for 
 				for (int32_t j = 0; j < dim2_y; j ++)
 					for (int32_t i = 0; i < dim1_y; i ++)
-						if (dim1_y*j + i < rowsKyini)
+						if (dim1_y*j + i < (int)rowsKyini)
 						{
 							Rotate(dKyini[dim1_y*j+i],ReduceRotation(-dim1_y*j, colsKyini));
 						}
@@ -2850,11 +3094,11 @@ void OfflineFeedback()
 # pragma omp parallel for 
 				for (int32_t j = 0; j < dim2_y; j ++)
 					for (int32_t i = 0; i < dim1_y; i ++)
-						if (dim1_y*j + i < colsKyini)
+						if (dim1_y*j + i < (int)colsKyini)
 						{
 							std::vector<complex<double>> temp1 = dKyini[dim1_y*j+i];
 							std::vector<complex<double>> temp2 = dKyini[dim1_y*j+i];
-							for (int32_t k = 1; k < colsKyini/rowsKyini; k++)
+							for (int32_t k = 1; k < (int)(colsKyini/rowsKyini); k++)
 								std::copy(temp2.begin(),temp2.end(),back_inserter(temp1));
 							std::copy(temp2.begin(),temp2.begin()+colsKyini%rowsKyini,back_inserter(temp1));	
 							dKyini[dim1_y*j+i] = temp1;
@@ -2875,7 +3119,7 @@ void OfflineFeedback()
 # pragma omp parallel for 
 		for (int32_t j = 0; j < dim2_u; j ++)
 			for (int32_t i = 0; i < dim1_u; i ++)
-				if (dim1_u*j + i < colsKuini)
+				if (dim1_u*j + i < (int)colsKuini)
 				{
 					Rotate(dKuini[dim1_u*j+i],ReduceRotation(-dim1_u*j, rowsKuini));
 				}
@@ -3388,7 +3632,7 @@ void OfflineFeedback()
 
 		TIC(t1);
 
-		// Re-encrypt variables // Make sure to cut the number of levels if necessary!
+		// Re-encrypt variables 
 		rep_yini = Fill(yini,slots);	
 		ptxt_yini = cc->MakeCKKSPackedPlaintext(rep_yini);
 		ctxt_yini = cc->Encrypt(keys.publicKey, ptxt_yini);
@@ -3416,266 +3660,5 @@ void OfflineFeedback()
 
 }
 
-Plant<complex<double>>* plantInitStableSys()
-{
-	auto zeroAlloc = [=]() { return 0; };
 
-	std::string SYSTEM = "stable_system_";
-	std::string FILETYPE = ".txt";
-
-	// Construct plant
-
-	uint32_t n = 4, m = 2, p = 4; 
-	// double W = 0.001, V = 0.01; // set noise parameters
-	double W = 0, V = 0;	
-	lbcrypto::Matrix<complex<double>> A = lbcrypto::Matrix<complex<double>>(zeroAlloc, n, n);
-	lbcrypto::Matrix<complex<double>> B = lbcrypto::Matrix<complex<double>>(zeroAlloc, n, m);
-	lbcrypto::Matrix<complex<double>> C = lbcrypto::Matrix<complex<double>>(zeroAlloc, p, n);	
-	readMatrix(A, n, DATAFOLDER + SYSTEM + "A" + FILETYPE);	
-	readMatrix(B, n, DATAFOLDER + SYSTEM + "B" + FILETYPE);	
-	readMatrix(C, p, DATAFOLDER + SYSTEM + "C" + FILETYPE);	
-
-	lbcrypto::Matrix<complex<double>> x0 = lbcrypto::Matrix<complex<double>>(zeroAlloc, n, 1);
-	readVector(x0, DATAFOLDER + SYSTEM + "x0" + FILETYPE, 0);	
-
-	Plant<complex<double>>* plant = new Plant<complex<double>>();
-	*plant = Plant<complex<double>>(A, B, C, x0, W, V);
-
-	// Precollect values
-	uint32_t Tini = 1;
-	uint32_t Tfin = 3;
-	uint32_t T = 10;
-	plant->M = Tini; plant->N = Tfin;
-
-	/* 
-	 * We don't consider concatenation of trajectories in this system example 
-	 */
-	lbcrypto::Matrix<complex<double>> ud = lbcrypto::Matrix<complex<double>>(zeroAlloc, m, T);
-	lbcrypto::Matrix<complex<double>> yd = lbcrypto::Matrix<complex<double>>(zeroAlloc, p, T);
-	readMatrix(ud, p, DATAFOLDER + SYSTEM + "ud" + FILETYPE);	
-	readMatrix(yd, m, DATAFOLDER + SYSTEM + "yd" + FILETYPE);	
-
-	uint32_t pu = m*Tini;
-	uint32_t fu = m*Tfin;
-	uint32_t py = p*Tini;
-	uint32_t fy = p*Tfin;
-
-	plant->precollect(ud, pu, fu, 1);
-	plant->precollect(yd, py, fy, 0);
-
-	lbcrypto::Matrix<complex<double>> uini = lbcrypto::Matrix<complex<double>>(zeroAlloc, pu, 1);
-	lbcrypto::Matrix<complex<double>> yini = lbcrypto::Matrix<complex<double>>(zeroAlloc, py, 1);
-	readVector(yini, DATAFOLDER + SYSTEM + "yini" + FILETYPE, 0);	
-	readVector(uini, DATAFOLDER + SYSTEM + "uini" + FILETYPE, 0);		
-
-	// Costs
-	lbcrypto::Matrix<complex<double>> Q = lbcrypto::Matrix<complex<double>>(zeroAlloc, fy, fy);
-	readMatrix(Q, fy, DATAFOLDER + SYSTEM + "Q" + FILETYPE);
-	lbcrypto::Matrix<complex<double>> R = lbcrypto::Matrix<complex<double>>(zeroAlloc, fu, fu);
-	readMatrix(R, fu, DATAFOLDER + SYSTEM + "R" + FILETYPE);
-
-	std::vector<double> lam;
-	readVector(lam, DATAFOLDER + SYSTEM + "lambda" + FILETYPE);
-	double lamg = lam[0];	
-	double lamy = lam[1];
-	double lamu = lam[2];
-	
-	plant->setCosts(Q, R, lamg, lamy, lamu);
-
-	// Set point
-	lbcrypto::Matrix<complex<double>> r = lbcrypto::Matrix<complex<double>>(zeroAlloc, fy, 1);
-	readVector(r, DATAFOLDER + SYSTEM + "ry" + FILETYPE, 0);
-
-	// plant->constLQR(); // the inversion is too slow so we read the inverse from file
-	lbcrypto::Matrix<complex<double>> K = lbcrypto::Matrix<complex<double>>(zeroAlloc, plant->S, plant->S);
-	readMatrix(K, fu, DATAFOLDER + SYSTEM + "K" + FILETYPE);
-	
-	plant->constLQR(K);
-
-	plant->setr(r);
-	plant->setyini(yini);
-	plant->setuini(uini);
-
-	/* 
-	 * Uncomment to see the plaintext behavior
-	 */
-	// uint32_t N = 10; 
-
-	// for(int i = 0; i < N; i ++)
-	// {
-	// 	cout << "i = " << i << endl;
-
-	// 	lbcrypto::Matrix<complex<double>> u = plant->updateu(r, uini, yini);
-	// 	plant->onlineUpdatex(u);	
-
-	// 	for (size_t j = 0; j < pu-m; j ++)
-	// 		uini(j,0) = uini(j+m,0);
-	// 	for (size_t j = pu-m; j < pu; j ++)
-	// 		uini(j,0) = plant->getu()(j-pu+m,0);
-
-	// 	for (size_t j = 0; j < py-p; j ++)
-	// 		yini(j,0) = yini(j+p,0);
-	// 	for (size_t j = py-p; j < py; j ++)
-	// 		yini(j,0) = plant->gety()(j-py+p,0);		
-
-	// 	plant->onlineLQR();
-	// }
-
-	return plant;
-}
-
-
-
-Plant<complex<double>>* plantInitRoom()
-{
-	auto zeroAlloc = [=]() { return 0; };
-
-	std::string SYSTEM = "room_";
-	std::string FILETYPE = ".txt";
-
-	// Construct plant
-
-	uint32_t n = 4, m = 1, p = 1; 
-	// double W = 0.001, V = 0.01; // set noise parameters
-	double W = 0, V = 0;
-	lbcrypto::Matrix<complex<double>> A = lbcrypto::Matrix<complex<double>>(zeroAlloc, n, n);
-	lbcrypto::Matrix<complex<double>> B = lbcrypto::Matrix<complex<double>>(zeroAlloc, n, m);
-	lbcrypto::Matrix<complex<double>> C = lbcrypto::Matrix<complex<double>>(zeroAlloc, p, n);	
-	readMatrix(A, n, DATAFOLDER + SYSTEM + "A" + FILETYPE);	
-	readMatrix(B, n, DATAFOLDER + SYSTEM + "B" + FILETYPE);	
-	readMatrix(C, p, DATAFOLDER + SYSTEM + "C" + FILETYPE);	
-
-	lbcrypto::Matrix<complex<double>> x0 = lbcrypto::Matrix<complex<double>>(zeroAlloc, n, 1);
-	readVector(x0, DATAFOLDER + SYSTEM + "x0" + FILETYPE, 0);	
-
-	Plant<complex<double>>* plant = new Plant<complex<double>>();
-	*plant = Plant<complex<double>>(A, B, C, x0, W, V);
-
-	// Precollect values
-	uint32_t Tini = 4;
-	uint32_t Tfin = 10;
-	uint32_t T = 40;
-	plant->M = Tini; plant->N = Tfin;
-
-	uint32_t pu = m*Tini;
-	uint32_t fu = m*Tfin;
-	uint32_t py = p*Tini;
-	uint32_t fy = p*Tfin;	
-
-	/* This does not work for trajectory concatenation
-	// lbcrypto::Matrix<complex<double>> ud = lbcrypto::Matrix<complex<double>>(zeroAlloc, m, T);
-	// lbcrypto::Matrix<complex<double>> yd = lbcrypto::Matrix<complex<double>>(zeroAlloc, p, T);
-	// readMatrix(yd, p, DATAFOLDER + SYSTEM + "yd" + FILETYPE);	
-	// readMatrix(ud, m, DATAFOLDER + SYSTEM + "ud" + FILETYPE);	
-	// plant->precollect(ud, pu, fu, 1);
-	// plant->precollect(yd, py, fy, 0);
-	*/
-
-	/* 
-	 * This takes directly the Hankel matrices for the concatenated trajectory values
-	 */
-	lbcrypto::Matrix<complex<double>> HU = lbcrypto::Matrix<complex<double>>(zeroAlloc, pu+fu, T-(Tini+Tfin)+1);
-	lbcrypto::Matrix<complex<double>> HY = lbcrypto::Matrix<complex<double>>(zeroAlloc, py+fy, T-(Tini+Tfin)+1);
-	readMatrix(HU, pu+fu, DATAFOLDER + SYSTEM + "HU" + FILETYPE);	
-	readMatrix(HY, py+fy, DATAFOLDER + SYSTEM + "HY" + FILETYPE);	
-
-	plant->precollectH(HU, pu, fu, 1);
-	plant->precollectH(HY, py, fy, 0);
-
-	lbcrypto::Matrix<complex<double>> uini = lbcrypto::Matrix<complex<double>>(zeroAlloc, m*Tini, 1);
-	lbcrypto::Matrix<complex<double>> yini = lbcrypto::Matrix<complex<double>>(zeroAlloc, p*Tini, 1);
-	readVector(yini, DATAFOLDER + SYSTEM + "yini" + FILETYPE, 0);	
-	readVector(uini, DATAFOLDER + SYSTEM + "uini" + FILETYPE, 0);		
-
-	// Costs
-	lbcrypto::Matrix<complex<double>> Q = lbcrypto::Matrix<complex<double>>(zeroAlloc, fy, fy);
-	readMatrix(Q, fy, DATAFOLDER + SYSTEM + "Q" + FILETYPE);
-	lbcrypto::Matrix<complex<double>> R = lbcrypto::Matrix<complex<double>>(zeroAlloc, fu, fu);
-	readMatrix(R, fu, DATAFOLDER + SYSTEM + "R" + FILETYPE);
-
-	std::vector<double> lam;
-	readVector(lam, DATAFOLDER + SYSTEM + "lambda" + FILETYPE);
-	double lamg = lam[0];	
-	double lamy = lam[1];
-	double lamu = lam[2];
-	
-	plant->setCosts(Q, R, lamg, lamy, lamu);
-
-	// Set point
-	lbcrypto::Matrix<complex<double>> r = lbcrypto::Matrix<complex<double>>(zeroAlloc, p*Tfin, 1);
-	readVector(r, DATAFOLDER + SYSTEM + "ry" + FILETYPE, 0);
-
-	// plant->constLQR(); // the inversion is too slow so read the inverse from file as well
-	lbcrypto::Matrix<complex<double>> K = lbcrypto::Matrix<complex<double>>(zeroAlloc, plant->S, plant->S);
-	readMatrix(K, fu, DATAFOLDER + SYSTEM + "K" + FILETYPE);
-
-	plant->constLQR(K);
-
-	plant->setr(r);
-	plant->setyini(yini);
-	plant->setuini(uini);
-
-	cout.precision(8);
-
-	/* 
-	 * Uncomment to see the plaintext behavior
-	 */
-	// uint32_t N = 5; 
-
-	// for(int i = 0; i < N; i ++)
-	// {
-	// 	cout << "i = " << i << endl;
-
-	// 	lbcrypto::Matrix<complex<double>> u = plant->updateu(r, uini, yini);
-	// 	plant->onlineUpdatex(u);
-
-	// 	for (size_t j = 0; j < pu-m; j ++)
-	// 		uini(j,0) = uini(j+m,0);
-	// 	for (size_t j = pu-m; j < pu; j ++)
-	// 		uini(j,0) = plant->getu()(j-pu+m,0);	
-
-	// 	for (size_t j = 0; j < py-p; j ++)
-	// 		yini(j,0) = yini(j+p,0);
-	// 	for (size_t j = py-p; j < py; j ++)
-	// 		yini(j,0) = plant->gety()(j-py+p,0);		
-
-	// 	plant->printYU();
-
-	// 	if (i < N - 1)
-	// 		plant->onlineLQR();
-	// }
-
-	// plant->setyini(yini);
-	// plant->setuini(uini);
-
-	// // Without updating: "offline" feedback
-
-	// uint32_t Nnon = 10;
-	// for(int i = 0; i < Nnon; i ++)
-	// {
-	// 	cout << "i = " << i << endl;
-
-	// 	lbcrypto::Matrix<complex<double>> u = plant->updateu(r, uini, yini);
-	// 	plant->updatex(u);	
-
-	// 	for (size_t j = 0; j < pu-m; j ++)
-	// 		uini(j,0) = uini(j+m,0);
-	// 	for (size_t j = pu-m; j < pu; j ++)
-	// 		uini(j,0) = plant->getu()(j-pu+m,0);
-
-	// 	for (size_t j = 0; j < py-p; j ++)
-	// 		yini(j,0) = yini(j+p,0);
-	// 	for (size_t j = py-p; j < py; j ++)
-	// 		yini(j,0) = plant->gety()(j-py+p,0);		
-
-	// 	plant->printYU();
-
-	// 	K = plant->getM_1();
-
-	// 	plant->constLQR(K);		
-
-	// }	
-
-	return plant;
-}
 

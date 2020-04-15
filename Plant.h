@@ -16,6 +16,9 @@
 using std::invalid_argument;
 using namespace std;
 
+// Make sure to define the correct path of the data folder
+const std::string DATAFOLDER = "../plantData/";
+
 template<class templElement>
 struct Costs{
 	std::vector<templElement> diagQ;
@@ -60,11 +63,7 @@ private:
 	/* Precollected intput past Hankel Matrix that keeps increasing with time in the online case*/
 	lbcrypto::Matrix<templElement> Up;		
 	/* Precollected intput future Hankel Matrix that keeps increasing with time in the online case */
-	lbcrypto::Matrix<templElement> Uf;	
-	/* Last column of the Hankel matrix for output measurements */
-	lbcrypto::Matrix<templElement> hY;
-	/* Last column of the Hankel matrix for inputs */
-	lbcrypto::Matrix<templElement> hU;			
+	lbcrypto::Matrix<templElement> Uf;		
 	/* The Hankel matrix for output measurements */
 	lbcrypto::Matrix<templElement> HY;
 	/* The Hankel matrix for inputs */
@@ -122,6 +121,12 @@ public:
 	/* Initial number of future precollected values */
 	uint32_t N;	
 
+	// For debugging
+	/* Last column of the Hankel matrix for output measurements */
+	lbcrypto::Matrix<templElement> hY;
+	/* Last column of the Hankel matrix for inputs */
+	lbcrypto::Matrix<templElement> hU;			
+
 	/* Empty constructor */
 	Plant();
 
@@ -139,14 +144,11 @@ public:
 	void updatex(const std::vector<templElement>& _u);
 
 	/* Update state x given the input u in the online case*/
-	void onlineUpdatex(const lbcrypto::Matrix<templElement>& _u);
+	void onlineUpdatex(const lbcrypto::Matrix<templElement>& _u);	
 	void onlineUpdatex(const std::vector<templElement>& _u);	
 
 	/* Get current state x */
 	lbcrypto::Matrix<templElement>& getx();
-
-	/* Get the state at the next time step x */
-	lbcrypto::Matrix<templElement>& getxplus();	
 
 	/* Get current input u */
 	lbcrypto::Matrix<templElement>& getu();
@@ -200,6 +202,12 @@ public:
 	/* Get intput trajectory */
 	lbcrypto::Matrix<templElement>& getTrajectU();	
 
+	/* Get output measurements */
+	lbcrypto::Matrix<templElement>& getYm();	
+
+	/* Get intput measurements */
+	lbcrypto::Matrix<templElement>& getUm();		
+
 	/* Get costs: diag(Q), diag(R), lamg, lamy, lamu */
 	Costs<templElement>& getCosts();	
 
@@ -226,6 +234,9 @@ public:
 
 	/* Compute new control input */
 	lbcrypto::Matrix<templElement> updateu(const lbcrypto::Matrix<templElement>& _r, const lbcrypto::Matrix<templElement>& _uini, const lbcrypto::Matrix<templElement>& _yini);
+
+	/* Update Hankel matrices and recompute inverse of matrix M after trajectory concatenation and update parameters*/
+	void concatLQR(const lbcrypto::Matrix<templElement>& _temp_y, const lbcrypto::Matrix<templElement>& _temp_u);
 
 	/* Print input-output measurements */
 	void printYU();
@@ -346,13 +357,7 @@ lbcrypto::Matrix<templElement>& Plant<templElement>::getx()
 {
 	return x;
 }
-
-/* Get the state at the next time step x */
-template<class templElement>
-lbcrypto::Matrix<templElement>& Plant<templElement>::getxplus()
-{
-	return xplus;
-}	
+	
 
 /* Get current input u */
 template<class templElement>
@@ -480,6 +485,20 @@ lbcrypto::Matrix<templElement>& Plant<templElement>::getTrajectU()
 	return TrajectU;
 }
 
+/* Get output measurements */
+template<class templElement>
+lbcrypto::Matrix<templElement>& Plant<templElement>::getYm()
+{
+	return Ym;
+}
+
+/* Get input measurements */
+template<class templElement>
+lbcrypto::Matrix<templElement>& Plant<templElement>::getUm()
+{
+	return Um;
+}
+
 /* Get costs: diag(Q), diag(R), lamg, lamy, lamu */
 template<class templElement>
 Costs<templElement>& Plant<templElement>::getCosts()
@@ -508,6 +527,9 @@ void Plant<templElement>::precollect(const lbcrypto::Matrix<templElement>& _Hd, 
 		HU = H;
 
 		hU = H.ExtractCol(H.GetCols()-1);
+
+		// cout << "Up\n" << Up << endl;
+		// cout << "Uf\n" << Uf << endl;
 	}
 	else
 	{
@@ -524,6 +546,9 @@ void Plant<templElement>::precollect(const lbcrypto::Matrix<templElement>& _Hd, 
 		HY = H;
 
 		hY = H.ExtractCol(H.GetCols()-1);
+
+		// cout << "Yp\n" << Yp << endl;
+		// cout << "Yf\n" << Yf << endl;		
 	}		
 
 }
@@ -554,6 +579,8 @@ void Plant<templElement>::precollectH(const lbcrypto::Matrix<templElement>& _Hd,
 	}		
 
 }	
+
+
 
 /* Create block Hankel Matrix from precollected vectors _Hd */
 template<class templElement>
@@ -627,6 +654,14 @@ void Plant<templElement>::constLQR(const lbcrypto::Matrix<templElement>& _M_1)
 	Kyini = (Kuf * Yp.Transpose()).ScalarMult(lamy);
 
 	M_1 = _M_1;
+
+	// cout.precision(8);
+	// cout << "_M_1\n" << _M_1 << endl;
+	// cout << "Kuf:\n" << Kuf << endl;
+	// cout << "YQ:\n" << YQ << endl;
+	// cout << "Kur:\n" << Kur << endl;
+	// cout << "Kuini:\n" << Kuini << endl;
+	// cout << "Kyini:\n" << Kyini << endl;
 }
 
 /* Compute new control input */
@@ -719,10 +754,13 @@ void Plant<templElement>::onlineUpdatex(const lbcrypto::Matrix<templElement>& _u
 	else{
 		Ym.HStack(y);
 		Um.HStack(u);
-	}
+	}	
+
+	// Increase the time step count
+	k += 1;	
 
 	std::vector<templElement> yV = mat2Vec(y);
-	std::vector<templElement> uV = mat2Vec(_u);
+	std::vector<templElement> uV = mat2Vec(u);
 
 	std::vector<templElement> hYV = mat2Vec(hY);
 	Rotate(hYV, p);
@@ -765,14 +803,12 @@ void Plant<templElement>::onlineUpdatex(const lbcrypto::Matrix<templElement>& _u
 	M11.VStack(M21);
 	M_1 = M11;
 
-	// Increase the time step count
-	k += 1;
 	Yp.HStack(yp);
 	Up.HStack(up);		
 	Yf.HStack(yf);
 	Uf.HStack(uf);
 	HY.HStack(hY);
-	HU.HStack(hU);
+	HU.HStack(hU);	
 	
 }
 
@@ -786,12 +822,438 @@ void Plant<templElement>::onlineUpdatex(const std::vector<templElement>& _u)
 	onlineUpdatex(u);
 }
 
+
+/* Update Hankel matrices and recompute inverse of matrix M after trajectory concatenation and update parameters*/
+template<class templElement>
+void Plant<templElement>::concatLQR(const lbcrypto::Matrix<templElement>& _temp_y, const lbcrypto::Matrix<templElement>& _temp_u)
+{
+	auto zeroAlloc = [=]() { return 0; };
+
+	hY = _temp_y;	
+	hU = _temp_u;	
+
+	lbcrypto::Matrix<templElement> yp = hY.ExtractRows(0,py-1);
+	lbcrypto::Matrix<templElement> yf = hY.ExtractRows(py,py+fy-1);
+
+	lbcrypto::Matrix<templElement> up = hU.ExtractRows(0,pu-1);
+	lbcrypto::Matrix<templElement> uf = hU.ExtractRows(pu,pu+fu-1);
+
+	lbcrypto::Matrix<templElement> mVec = yf.Transpose() * Q * Yf + uf.Transpose() * R * Uf + (yp.Transpose() * Yp).ScalarMult(lamy) + (up.Transpose() * Up).ScalarMult(lamu);
+
+	lbcrypto::Matrix<templElement> mSc = yf.Transpose() * Q * yf + uf.Transpose() * R * uf + (yp.Transpose() * yp).ScalarMult(lamy) + (up.Transpose()).ScalarMult(lamu) * up + templElement(lamg);
+
+	lbcrypto::Matrix<templElement> M_1mVecT = M_1 * mVec.Transpose();
+
+	lbcrypto::Matrix<templElement> Temp = mSc - mVec * M_1mVecT;
+
+	templElement mSchur = Temp(0,0);
+	templElement mSchur_1 = templElement(1)/mSchur;
+
+	lbcrypto::Matrix<templElement> M11 = M_1 + (M_1mVecT * M_1mVecT.Transpose()).ScalarMult(mSchur_1);
+	lbcrypto::Matrix<templElement> M12 = M_1mVecT.ScalarMult(-mSchur_1);
+	lbcrypto::Matrix<templElement> M21 = M12.Transpose();
+	lbcrypto::Matrix<templElement> M22 = lbcrypto::Matrix<templElement>(zeroAlloc, 1, 1); M22(0,0) = mSchur_1;
+
+	M11.HStack(M12);
+	M21.HStack(M22);
+	M11.VStack(M21);
+	M_1 = M11;
+
+	Yp.HStack(yp);
+	Up.HStack(up);		
+	Yf.HStack(yf);
+	Uf.HStack(uf);
+	HY.HStack(hY);
+	HU.HStack(hU);
+
+	S = HU.GetCols();			
+	
+}
+
 /* Print input-output measurements */
 template<class templElement>
 void Plant<templElement>::printYU()
 {
 	std::cout << "Ym = " << Ym << std::endl;
 	std::cout << "Um = " << Um << std::endl;	
+}
+
+/**
+ * Simulates the unencrypted plant control
+ */
+
+Plant<complex<double>>* plantInitRoom()
+{
+	auto zeroAlloc = [=]() { return 0; };
+	std::string SYSTEM = "room_";
+	std::string FILETYPE = ".txt";
+
+	// Construct plant
+
+	uint32_t n = 4, m = 1, p = 1; 
+	// double W = 0.001, V = 0.01;
+	double W = 0, V = 0;
+	lbcrypto::Matrix<complex<double>> A = lbcrypto::Matrix<complex<double>>(zeroAlloc, n, n);
+	lbcrypto::Matrix<complex<double>> B = lbcrypto::Matrix<complex<double>>(zeroAlloc, n, m);
+	lbcrypto::Matrix<complex<double>> C = lbcrypto::Matrix<complex<double>>(zeroAlloc, p, n);	
+	readMatrix(A, n, DATAFOLDER + SYSTEM + "A" + FILETYPE);	
+	readMatrix(B, n, DATAFOLDER + SYSTEM + "B" + FILETYPE);	
+	readMatrix(C, p, DATAFOLDER + SYSTEM + "C" + FILETYPE);	
+
+	lbcrypto::Matrix<complex<double>> x0 = lbcrypto::Matrix<complex<double>>(zeroAlloc, n, 1);
+	readVector(x0, DATAFOLDER + SYSTEM + "x0" + FILETYPE, 0);	
+
+	Plant<complex<double>>* plant = new Plant<complex<double>>();
+	*plant = Plant<complex<double>>(A, B, C, x0, W, V);
+
+	// Precollect values
+	uint32_t Tini = 4;
+	uint32_t Tfin = 10;
+	uint32_t T = 40;
+	plant->M = Tini; plant->N = Tfin;
+
+	uint32_t pu = m*Tini;
+	uint32_t fu = m*Tfin;
+	uint32_t py = p*Tini;
+	uint32_t fy = p*Tfin;	
+
+	lbcrypto::Matrix<complex<double>> ud = lbcrypto::Matrix<complex<double>>(zeroAlloc, m, T);
+	lbcrypto::Matrix<complex<double>> yd = lbcrypto::Matrix<complex<double>>(zeroAlloc, p, T);
+	readMatrix(yd, p, DATAFOLDER + SYSTEM + "yd" + FILETYPE);	
+	readMatrix(ud, m, DATAFOLDER + SYSTEM + "ud" + FILETYPE);	
+
+	plant->precollect(ud, pu, fu, 1);
+	plant->precollect(yd, py, fy, 0);
+
+
+	lbcrypto::Matrix<complex<double>> uini = lbcrypto::Matrix<complex<double>>(zeroAlloc, m*Tini, 1);
+	lbcrypto::Matrix<complex<double>> yini = lbcrypto::Matrix<complex<double>>(zeroAlloc, p*Tini, 1);
+	readVector(yini, DATAFOLDER + SYSTEM + "yini" + FILETYPE, 0);	
+	readVector(uini, DATAFOLDER + SYSTEM + "uini" + FILETYPE, 0);
+
+
+	// Costs
+	lbcrypto::Matrix<complex<double>> Q = lbcrypto::Matrix<complex<double>>(zeroAlloc, fy, fy);
+	readMatrix(Q, fy, DATAFOLDER + SYSTEM + "Q" + FILETYPE);
+	lbcrypto::Matrix<complex<double>> R = lbcrypto::Matrix<complex<double>>(zeroAlloc, fu, fu);
+	readMatrix(R, fu, DATAFOLDER + SYSTEM + "R" + FILETYPE);
+
+	std::vector<double> lam;
+	readVector(lam, DATAFOLDER + SYSTEM + "lambda" + FILETYPE);
+	double lamg = lam[0];	
+	double lamy = lam[1];
+	double lamu = lam[2];
+	
+	plant->setCosts(Q, R, lamg, lamy, lamu);
+
+	// Set point
+	lbcrypto::Matrix<complex<double>> r = lbcrypto::Matrix<complex<double>>(zeroAlloc, p*Tfin, 1);
+	readVector(r, DATAFOLDER + SYSTEM + "ry" + FILETYPE, 0);
+
+	// plant->constLQR(); // the inversion is too slow so read the inverse from a file
+	lbcrypto::Matrix<complex<double>> K = lbcrypto::Matrix<complex<double>>(zeroAlloc, plant->S, plant->S);
+	readMatrix(K, fu, DATAFOLDER + SYSTEM + "K" + FILETYPE);
+
+	plant->constLQR(K);
+
+	plant->setr(r);
+	plant->setyini(yini);
+	plant->setuini(uini);
+
+	// This is if you want no delay between HU, HY and uini, yini
+	lbcrypto::Matrix<complex<double>> temp_u = plant->getHU().ExtractCol(plant->S-1);
+	lbcrypto::Matrix<complex<double>> temp_y = plant->getHY().ExtractCol(plant->S-1);
+
+	// Update temp_u, temp_y with uini and yini
+	for (size_t j = 0; j < fu; j ++)
+		temp_u(j,0) = temp_u(j+pu,0);
+	for (size_t j = fu; j < pu+fu; j ++)
+		temp_u(j,0) = uini(j-fu,0);
+
+	for (size_t j = 0; j < fy; j ++)
+		temp_y(j,0) = temp_y(j+py,0);
+	for (size_t j = fy; j < py+fy; j ++)
+		temp_y(j,0) = yini(j-fy,0);
+
+	/* 
+	 * Uncomment to see the plaintext behavior
+	 */
+
+	// cout.precision(10);
+
+	// uint32_t N = Tfin; 
+
+	// for(int i = 0; i < N; i ++)
+	// {
+
+	// 	lbcrypto::Matrix<complex<double>> u = plant->updateu(r, uini, yini);
+	// 	plant->updatex(u);
+
+	// 	for (size_t j = 0; j < pu-m; j ++)
+	// 		uini(j,0) = uini(j+m,0);
+	// 	for (size_t j = pu-m; j < pu; j ++)
+	// 		uini(j,0) = plant->getu()(j-pu+m,0);	
+
+	// 	for (size_t j = 0; j < py-p; j ++)
+	// 		yini(j,0) = yini(j+p,0);
+	// 	for (size_t j = py-p; j < py; j ++)
+	// 		yini(j,0) = plant->gety()(j-py+p,0);		
+
+	// 	// plant->constLQR(K);		
+
+	// 	// save the measurements to concatenate the trajectories
+	// 		for (size_t j = 0; j < pu+fu-m; j ++)
+	// 			temp_u(j,0) = temp_u(j+m,0);
+	// 		for (size_t j = pu+fu-m; j < pu+fu; j ++)
+	// 			temp_u(j,0) = plant->getu()(j-pu-fu+m,0);
+
+	// 		for (size_t j = 0; j < py+fy-p; j ++)
+	// 			temp_y(j,0) = temp_y(j+p,0);
+	// 		for (size_t j = py+fy-p; j < py+fy; j ++)
+	// 			temp_y(j,0) = plant->gety()(j-py-fy+p,0);		
+
+	// 	// plant->printYU();
+
+
+	// plant->printYU();	
+
+	// // concatenate trajectories and recompute inverse
+	// plant->concatLQR(temp_y, temp_u);
+	// plant->onlineLQR();
+	// // plant->hU = temp_u;
+	// // plant->hY = temp_y;
+
+	// N = 15;
+
+	// for(int i = 0; i < N; i ++)
+	// {
+
+	// 	lbcrypto::Matrix<complex<double>> u = plant->updateu(r, uini, yini);
+	// 	plant->onlineUpdatex(u);	
+
+	// 	for (size_t j = 0; j < pu-m; j ++)
+	// 		uini(j,0) = uini(j+m,0);
+	// 	for (size_t j = pu-m; j < pu; j ++)
+	// 		uini(j,0) = plant->getu()(j-pu+m,0);
+
+	// 	for (size_t j = 0; j < py-p; j ++)
+	// 		yini(j,0) = yini(j+p,0);
+	// 	for (size_t j = py-p; j < py; j ++)
+	// 		yini(j,0) = plant->gety()(j-py+p,0);	
+	
+	// 	plant->onlineLQR();
+
+	// }
+
+	// plant->printYU();
+
+
+	// uint32_t Nnon = 10;
+	// for(int i = 0; i < Nnon; i ++)
+	// {
+
+	// 	lbcrypto::Matrix<complex<double>> u = plant->updateu(r, uini, yini);
+	// 	plant->updatex(u);
+
+	// 	for (size_t j = 0; j < pu-m; j ++)
+	// 		uini(j,0) = uini(j+m,0);
+	// 	for (size_t j = pu-m; j < pu; j ++)
+	// 		uini(j,0) = plant->getu()(j-pu+m,0);	
+
+	// 	for (size_t j = 0; j < py-p; j ++)
+	// 		yini(j,0) = yini(j+p,0);
+	// 	for (size_t j = py-p; j < py; j ++)
+	// 		yini(j,0) = plant->gety()(j-py+p,0);		
+
+	// }	
+	// plant->printYU();
+
+	return plant;
+}
+
+Plant<complex<double>>* plantInitStableSys()
+{
+	auto zeroAlloc = [=]() { return 0; };
+
+	std::string SYSTEM = "stable_system_";
+	std::string FILETYPE = ".txt";
+
+	// Construct plant
+
+	uint32_t n = 4, m = 2, p = 4; 
+	// double W = 0.001, V = 0.01;
+	double W = 0, V = 0;
+	lbcrypto::Matrix<complex<double>> A = lbcrypto::Matrix<complex<double>>(zeroAlloc, n, n);
+	lbcrypto::Matrix<complex<double>> B = lbcrypto::Matrix<complex<double>>(zeroAlloc, n, m);
+	lbcrypto::Matrix<complex<double>> C = lbcrypto::Matrix<complex<double>>(zeroAlloc, p, n);	
+	readMatrix(A, n, DATAFOLDER + SYSTEM + "A" + FILETYPE);	
+	readMatrix(B, n, DATAFOLDER + SYSTEM + "B" + FILETYPE);	
+	readMatrix(C, p, DATAFOLDER + SYSTEM + "C" + FILETYPE);	
+
+	lbcrypto::Matrix<complex<double>> x0 = lbcrypto::Matrix<complex<double>>(zeroAlloc, n, 1);
+	readVector(x0, DATAFOLDER + SYSTEM + "x0" + FILETYPE, 0);	
+
+	Plant<complex<double>>* plant = new Plant<complex<double>>();
+	*plant = Plant<complex<double>>(A, B, C, x0, W, V);
+
+	// Precollect values
+	uint32_t Tini = 2;
+	uint32_t Tfin = 4;
+	uint32_t T = 20;
+	plant->M = Tini; plant->N = Tfin;
+
+	uint32_t pu = m*Tini;
+	uint32_t fu = m*Tfin;
+	uint32_t py = p*Tini;
+	uint32_t fy = p*Tfin;	
+
+	lbcrypto::Matrix<complex<double>> ud = lbcrypto::Matrix<complex<double>>(zeroAlloc, m, T);
+	lbcrypto::Matrix<complex<double>> yd = lbcrypto::Matrix<complex<double>>(zeroAlloc, p, T);
+	readMatrix(yd, p, DATAFOLDER + SYSTEM + "yd" + FILETYPE);	
+	readMatrix(ud, m, DATAFOLDER + SYSTEM + "ud" + FILETYPE);	
+
+	plant->precollect(ud, pu, fu, 1);
+	plant->precollect(yd, py, fy, 0);
+
+
+	lbcrypto::Matrix<complex<double>> uini = lbcrypto::Matrix<complex<double>>(zeroAlloc, m*Tini, 1);
+	lbcrypto::Matrix<complex<double>> yini = lbcrypto::Matrix<complex<double>>(zeroAlloc, p*Tini, 1);
+	readVector(yini, DATAFOLDER + SYSTEM + "yini" + FILETYPE, 0);	
+	readVector(uini, DATAFOLDER + SYSTEM + "uini" + FILETYPE, 0);
+
+
+	// Costs
+	lbcrypto::Matrix<complex<double>> Q = lbcrypto::Matrix<complex<double>>(zeroAlloc, fy, fy);
+	readMatrix(Q, fy, DATAFOLDER + SYSTEM + "Q" + FILETYPE);
+	lbcrypto::Matrix<complex<double>> R = lbcrypto::Matrix<complex<double>>(zeroAlloc, fu, fu);
+	readMatrix(R, fu, DATAFOLDER + SYSTEM + "R" + FILETYPE);
+
+	std::vector<double> lam;
+	readVector(lam, DATAFOLDER + SYSTEM + "lambda" + FILETYPE);
+	double lamg = lam[0];	
+	double lamy = lam[1];
+	double lamu = lam[2];
+	
+	plant->setCosts(Q, R, lamg, lamy, lamu);
+
+	// Set point
+	lbcrypto::Matrix<complex<double>> r = lbcrypto::Matrix<complex<double>>(zeroAlloc, p*Tfin, 1);
+	readVector(r, DATAFOLDER + SYSTEM + "ry" + FILETYPE, 0);
+
+	// plant->constLQR(); // the inversion is too slow so read the inverse from a file
+	lbcrypto::Matrix<complex<double>> K = lbcrypto::Matrix<complex<double>>(zeroAlloc, plant->S, plant->S);
+	readMatrix(K, fu, DATAFOLDER + SYSTEM + "K" + FILETYPE);
+
+	plant->constLQR(K);
+
+	plant->setr(r);
+	plant->setyini(yini);
+	plant->setuini(uini);
+
+	// This is if you want no delay between HU, HY and uini, yini
+	lbcrypto::Matrix<complex<double>> temp_u = plant->getHU().ExtractCol(plant->S-1);
+	lbcrypto::Matrix<complex<double>> temp_y = plant->getHY().ExtractCol(plant->S-1);
+
+	// Update temp_u, temp_y with uini and yini
+	for (size_t j = 0; j < fu; j ++)
+		temp_u(j,0) = temp_u(j+pu,0);
+	for (size_t j = fu; j < pu+fu; j ++)
+		temp_u(j,0) = uini(j-fu,0);
+
+	for (size_t j = 0; j < fy; j ++)
+		temp_y(j,0) = temp_y(j+py,0);
+	for (size_t j = fy; j < py+fy; j ++)
+		temp_y(j,0) = yini(j-fy,0);
+
+	/* 
+	 * Uncomment to see the plaintext behavior
+	 */
+
+	// cout.precision(10);
+
+	// uint32_t N = Tfin; 	
+
+	// for(int i = 0; i < N; i ++)
+	// {
+
+	// 	lbcrypto::Matrix<complex<double>> u = plant->updateu(r, uini, yini);
+	// 	plant->updatex(u);	
+
+	// 	for (size_t j = 0; j < pu-m; j ++)
+	// 		uini(j,0) = uini(j+m,0);
+	// 	for (size_t j = pu-m; j < pu; j ++)
+	// 		uini(j,0) = plant->getu()(j-pu+m,0);	
+
+	// 	for (size_t j = 0; j < py-p; j ++)
+	// 		yini(j,0) = yini(j+p,0);
+	// 	for (size_t j = py-p; j < py; j ++)
+	// 		yini(j,0) = plant->gety()(j-py+p,0);		
+
+	// 	// save the measurements to concatenate the trajectories
+	// 		for (size_t j = 0; j < pu+fu-m; j ++)
+	// 			temp_u(j,0) = temp_u(j+m,0);
+	// 		for (size_t j = pu+fu-m; j < pu+fu; j ++)
+	// 			temp_u(j,0) = plant->getu()(j-pu-fu+m,0);
+
+	// 		for (size_t j = 0; j < py+fy-p; j ++)
+	// 			temp_y(j,0) = temp_y(j+p,0);
+	// 		for (size_t j = py+fy-p; j < py+fy; j ++)
+	// 			temp_y(j,0) = plant->gety()(j-py-fy+p,0);			
+	// }
+
+	// plant->printYU();	
+
+	// // concatenate trajectories and recompute inverse
+	// plant->concatLQR(temp_y, temp_u);
+	// plant->onlineLQR();
+
+
+	// N = 5;
+
+	// for(int i = 0; i < N; i ++)
+	// {
+
+	// 	lbcrypto::Matrix<complex<double>> u = plant->updateu(r, uini, yini);
+	// 	plant->onlineUpdatex(u);	
+
+	// 	for (size_t j = 0; j < pu-m; j ++)
+	// 		uini(j,0) = uini(j+m,0);
+	// 	for (size_t j = pu-m; j < pu; j ++)
+	// 		uini(j,0) = plant->getu()(j-pu+m,0);
+
+	// 	for (size_t j = 0; j < py-p; j ++)
+	// 		yini(j,0) = yini(j+p,0);
+	// 	for (size_t j = py-p; j < py; j ++)
+	// 		yini(j,0) = plant->gety()(j-py+p,0);	
+	
+
+	// 	plant->onlineLQR();
+
+	// }
+
+	// plant->printYU();
+
+
+	// uint32_t Nnon = 10;
+	// for(int i = 0; i < Nnon; i ++)
+	// {
+	// 	lbcrypto::Matrix<complex<double>> u = plant->updateu(r, uini, yini);
+	// 	plant->updatex(u);
+
+	// 	for (size_t j = 0; j < pu-m; j ++)
+	// 		uini(j,0) = uini(j+m,0);
+	// 	for (size_t j = pu-m; j < pu; j ++)
+	// 		uini(j,0) = plant->getu()(j-pu+m,0);	
+
+	// 	for (size_t j = 0; j < py-p; j ++)
+	// 		yini(j,0) = yini(j+p,0);
+	// 	for (size_t j = py-p; j < py; j ++)
+	// 		yini(j,0) = plant->gety()(j-py+p,0);		
+
+	// }	
+	// plant->printYU();
+
+	return plant;
 }
 
 #endif
